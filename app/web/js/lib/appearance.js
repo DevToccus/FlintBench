@@ -13,7 +13,7 @@ export const PALETTES = [
 ];
 export const PALETTE_IDS = PALETTES.map(([id]) => id);
 
-export const SCENES = [['none', 'None'], ['blue-hour', 'Blue hour']];
+export const SCENES = [['none', 'None'], ['blue-hour', 'Blue hour'], ['night-sky', 'Night sky'], ['fireworks', 'Fireworks'], ['geometric', 'Red and blue']];
 export const SCENE_IDS = SCENES.map(([id]) => id);
 
 /** Background blur, whole px: [min, max]. Past 40 the picture is only colour. */

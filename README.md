@@ -56,9 +56,14 @@ agents, profiles) works as before.
   always in reach; on small screens it folds onto two rows.
 - **Six colour themes** (Graphite, Blue hour, Pine, Dusk, Ember, Carbon), each dark and light, plus
   any accent colour you like.
-- **Blue hour background**: a real-time 1440p video of a city skyline over a calm river, in a
-  seamless 30 s loop, also behind the lock screen. Blur (0–40 px) and transparency of bars and
-  cards (0–60%) are yours to set, and the animation can be turned off.
+- **Video backgrounds**, each in a seamless loop and also behind the lock screen:
+  - **Blue hour**: a city skyline over a calm river just after sunset;
+  - **Night sky**: clouds drifting over a town at dusk, in time-lapse;
+  - **Fireworks**: New Year's fireworks over Dubai;
+  - **Red and blue**: soft red and blue geometric shapes on black.
+
+  Blur (0–40 px) and transparency of bars and cards (0–60%) are yours to set, and the animation
+  can be turned off.
 - **Text size from 75 to 150%**, in 5% steps with `−` and `+` or typed by hand; the interface
   grows with the text.
 - **LED clock in the top bar**, in every section and inside projects: time, seconds, day and date.
@@ -271,8 +276,7 @@ Plain Node.js (HTTP, `fs.watch`, `crypto.argon2`) and vanilla JavaScript modules
 build step. [ws](https://github.com/websockets/ws) for live updates,
 [node-pty](https://github.com/microsoft/node-pty) and [xterm.js](https://xtermjs.org) for the
 terminals, [Geist](https://vercel.com/font) and [Nerd Fonts](https://www.nerdfonts.com) symbols for type.
-The Blue hour background is a [Pexels](https://www.pexels.com/video/blue-hour-cityscape-over-tranquil-river-39414261/)
-video (see `app/web/media/README.md`).
+The background videos come from [Pexels](https://www.pexels.com) (credits in `app/web/media/README.md`).
 
 ## License
 

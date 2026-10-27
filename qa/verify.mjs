@@ -263,6 +263,12 @@ try {
   const rejected = await context.request.fetch('http://127.0.0.1:4488/api/settings', { method: 'PATCH', data: { appearance: { transparency: 90 } }, headers: { Origin: 'http://127.0.0.1:4488', 'X-FlintBench': '1' } });
   assert.equal(rejected.status(), 400);
   await page.screenshot({ path: path.join(artifacts, 'home-blue-hour.png') });
+  for (const scene of ['night-sky', 'fireworks', 'geometric']) {
+    await api('/api/settings', 'PATCH', { appearance: { scene } });
+    await page.waitForFunction((s) => document.querySelector(`.scene[data-scene="${s}"] video source[type="video/webm"]`), scene);
+    const served = await page.evaluate((s) => Promise.all([`/media/${s}.webm`, `/media/${s}.mp4`, `/media/${s}.jpg`].map((u) => fetch(u, { headers: { Range: 'bytes=0-1023' } }).then((r) => r.status))), scene);
+    assert.deepEqual(served.map((st) => st === 200 || st === 206), [true, true, true], `Background ${scene} is not served: ${served}`);
+  }
   await api('/api/settings', 'PATCH', { appearance: { palette: 'graphite', scene: 'none', sceneBlur: 0, transparency: 0 } });
   await page.waitForFunction(() => !document.querySelector('.scene') && !document.documentElement.dataset.palette);
   pass('Colour theme, blue hour video background (served in ranges), blur and transparency apply and are validated');

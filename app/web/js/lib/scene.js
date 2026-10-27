@@ -1,13 +1,13 @@
 // The background scene: a looping video behind the console (app/web/media), shown through a scrim
-// of the canvas colour. Blue hour: a city skyline across a calm river just after sunset, filmed in
-// real time, its lights reflected on the slow water (Pexels, free licence: see
-// app/web/media/README.md). It plays muted and pauses on its current frame when motion is off,
+// of the canvas colour. Blue hour: a city skyline across a calm river just after sunset. Night sky:
+// clouds drifting over a town at dusk, in time-lapse. Fireworks: New Year's fireworks over Dubai.
+// Red and blue: soft red and blue geometric shapes on black. All from Pexels, free licence: see
+// app/web/media/README.md. It plays muted and pauses on its current frame when motion is off,
 // when the system asks for reduced motion, and while FlintBench is not on screen.
 
-/** Each scene: its video (WebM first, MP4 where WebM is not played) and a still for the picker. */
-const MEDIA = {
-  'blue-hour': { sources: [['/media/blue-hour.webm', 'video/webm'], ['/media/blue-hour.mp4', 'video/mp4']], poster: '/media/blue-hour.jpg' },
-};
+/** A scene's video (WebM first, MP4 where WebM is not played) and a still for the picker. */
+const media = (id) => ({ sources: [[`/media/${id}.webm`, 'video/webm'], [`/media/${id}.mp4`, 'video/mp4']], poster: `/media/${id}.jpg` });
+const MEDIA = Object.fromEntries(['blue-hour', 'night-sky', 'fireworks', 'geometric'].map((id) => [id, media(id)]));
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 let layer = null;

@@ -589,9 +589,9 @@ export function mount(container, _route, actions) {
           styleSetting('accent', 'Accent colour', 'The colour of selections, links, focus and the clock.',
             (v, set) => accentPicker(v, set),
             { fmt: accentText, wide: true, keywords: 'color colour accent highlight hue' }),
-          setting('appearance.scene', 'Background', 'A video behind the console. Blue hour: a city skyline across a calm river just after sunset, filmed in real time, its lights on the slow water.',
+          setting('appearance.scene', 'Background', 'A video behind the console. Blue hour: a city skyline across a calm river just after sunset. Night sky: clouds drifting over a town at dusk. Fireworks: New Year over Dubai. Red and blue: soft geometric shapes on black.',
             (v, set) => choiceCards('Background', SCENES.map(([value, text]) => ({ value, text, visual: sceneVisual(value) })), v, set, '.is-scenes'),
-            { fmt: (v) => SCENES.find(([id]) => id === v)?.[1] ?? 'None', wide: true, keywords: 'wallpaper image scene picture video blue hour lake animated' }),
+            { fmt: (v) => SCENES.find(([id]) => id === v)?.[1] ?? 'None', wide: true, keywords: 'wallpaper image scene picture video blue hour lake night sky clouds fireworks dubai red blue geometric animated' }),
           valueOf('appearance.scene') !== 'none'
             ? toggleSetting('appearance.sceneMotion', 'Animated background', 'Off: the picture stands still. It also stands still when the system asks for reduced motion, and pauses while FlintBench is not on screen.', { keywords: 'motion animation still' })
             : null,
