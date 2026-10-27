@@ -30,7 +30,7 @@
     "All main sections still mount",
     "Add project from the home CTA, persistence and disabled power for static folders",
     "Profile changes preserve the home and hide disabled agent features",
-    "Lock clears project data from the DOM and password unlock restores it",
+    "Lock clears project data from the DOM, the sign-in wears the video background, password unlock restores it",
     "No browser runtime errors"
   ],
   "warnings": [],

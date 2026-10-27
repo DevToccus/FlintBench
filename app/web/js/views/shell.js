@@ -47,7 +47,7 @@ export function mountShell(root, actions) {
   const indicator = h('span.rail-indicator', { 'aria-hidden': 'true' });
   // the logo opens and closes the menu: icons only, or icons with their names beside them
   const brand = h('a.rail-brand', { href: '/', 'aria-label': 'FlintBench home' },
-    h('span.brand-mark', brandMark()), h('span.brand-name', 'Flint', h('span', 'Bench')), h('span.v2-version', 'v2'));
+    h('span.brand-mark', brandMark()), h('span.brand-name', 'Flint', h('span', 'Bench')));
   const commandBtn = h('button.v2-command', { type: 'button', title: 'Search projects and commands (Ctrl+K)', 'aria-label': 'Search projects and commands', onclick: () => openPalette(paletteItems()) }, icon('search', 15), h('kbd', 'Ctrl K'));
   // date and time: always in the top bar, in every section and inside projects; it opens the timer
   const clock = ledClock();

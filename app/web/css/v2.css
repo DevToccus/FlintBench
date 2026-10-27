@@ -73,7 +73,6 @@ body { background: var(--bg-solid); }
 .rail-brand .brand-mark, .rail-brand .brand-name, .app.rail-open .rail-brand .brand-name { position: static; opacity: 1; transform: none; pointer-events: auto; }
 .rail-brand .brand-mark { width: 30px; height: 30px; }
 .rail-brand .brand-name { font-size: 19px; letter-spacing: -.8px; font-weight: 630; }
-.v2-version { color: var(--text-3); border: 1px solid var(--line-strong); border-radius: 5px; padding: 2px 5px; font: 11px var(--font-mono); }
 .v2-navlinks { display: flex; align-items: center; gap: 3px; }
 .rail-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: auto; height: 38px; padding: 0 13px; font-size: 13px; letter-spacing: 0; color: var(--text-2); }
 .rail-link > svg, .app.rail-open .rail-link > svg { position: static; width: 16px; height: 16px; }
@@ -88,43 +87,95 @@ body { background: var(--bg-solid); }
 .v2-command:hover { color: var(--text); background: var(--raised); }
 .v2-lock { padding: 0 9px; }
 .v2-lock .rl-side { display: none; }
-/* Icon feedback is local to an enabled control: never to a card, live signal or brand mark.
-   Ink travels within its existing viewport; layout, labels and pointer targets do not move. */
-:where(.v2-navlinks > .rail-link, .v2-command, .p-nav > a, .p-nav > button, .v2-add, .v2-scan,
-       .project-card-open, .project-card-resume, .page-head .btn, .p-head .actions .btn) {
-  --icon-engaged: 0;
-}
-:where(.v2-navlinks > .rail-link, .v2-command, .p-nav > a, .p-nav > button, .v2-add, .v2-scan,
-       .project-card-open, .project-card-resume, .page-head .btn, .p-head .actions .btn) > svg[data-icon] > path:not([data-icon-part="fixed"]) {
-  transform-box: fill-box;
-  transform-origin: center;
+/* Icon feedback belongs to the enabled control that holds the icon (link, button, tab, menu item):
+   never to a card, a live signal or the brand mark. Each icon moves the part that carries its
+   meaning (lib/dom.js names the parts); its frame, the control, its label and hit area stay still.
+   Offsets are in % of the 24-unit grid, so they keep their proportion at every size. */
+:where(a, button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) { --icon-engaged: 0; }
+:where(a, button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) > svg[data-icon] > path:not([data-icon-part="fixed"]) {
+  transform-box: view-box;
+  transform-origin: var(--icon-origin, 50% 50%);
   transform: translate(calc(var(--icon-engaged, 0) * var(--icon-x, 0%)), calc(var(--icon-engaged, 0) * var(--icon-y, 0%)))
     rotate(calc(var(--icon-engaged, 0) * var(--icon-turn, 0deg)))
-    scale(calc(1 + var(--icon-engaged, 0) * var(--icon-grow-x, 0)), calc(1 + var(--icon-engaged, 0) * var(--icon-grow-y, 0)));
-  transition: transform 180ms var(--ease);
+    scale(calc(1 + var(--icon-engaged, 0) * var(--icon-grow-x, var(--icon-grow, 0))), calc(1 + var(--icon-engaged, 0) * var(--icon-grow-y, var(--icon-grow, 0))));
+  transition: transform var(--icon-time, 200ms) var(--ease);
 }
-/* Travel follows each mark: open outwards, resume around its arc, adjust sliders in opposition. */
-svg:is([data-icon="home"], [data-icon="folder"], [data-icon="file"], [data-icon="context"]) { --icon-y: -7%; }
-svg[data-icon="folder"] { --icon-turn: -4deg; }
-svg[data-icon="agent"] { --icon-turn: 18deg; }
-svg[data-icon="activity"] { --icon-grow-y: .15; }
-svg:is([data-icon="overview"], [data-icon="workspace"], [data-icon="dock"], [data-icon="box"], [data-icon="graph"], [data-icon="branch"], [data-icon="search"], [data-icon="plus"]) { --icon-grow-x: .1; --icon-grow-y: .1; }
-svg:is([data-icon="resume"], [data-icon="refresh"], [data-icon="restart"]) { --icon-turn: 24deg; }
-svg:is([data-icon="play"], [data-icon="editor"], [data-icon="terminal"], [data-icon="work"]) { --icon-x: 10%; }
-svg[data-icon="external"] { --icon-x: 13%; --icon-y: -13%; }
-svg[data-icon="settings"] > [data-icon-part="upper"] { --icon-x: 9%; }
-svg[data-icon="settings"] > [data-icon-part="lower"] { --icon-x: -9%; }
+/* travel follows each mark: doors open, arrows leave, sliders adjust in opposition, loops turn */
+svg[data-icon="home"] { --icon-y: -6%; }
+svg[data-icon="home"] > [data-icon-part="door"] { --icon-grow-x: -.55; --icon-origin: 39.6% 87%; }
+svg[data-icon="folder"] > [data-icon-part="flap"] { --icon-turn: -11deg; --icon-origin: 10.4% 48%; }
+svg[data-icon="agent"] > [data-icon-part="rays"] { --icon-turn: 45deg; --icon-time: 420ms; }
+svg[data-icon="agent"] > [data-icon-part="core"] { --icon-grow: .22; }
+svg[data-icon="settings"] > [data-icon-part="upper"] { --icon-x: 10%; }
+svg[data-icon="settings"] > [data-icon-part="lower"] { --icon-x: -10%; }
+svg[data-icon="terminal"] > [data-icon-part="caret"] { --icon-x: 9%; }
+svg[data-icon="branch"] > [data-icon-part="tip"] { --icon-turn: 12deg; --icon-origin: 25% 73%; }
+svg:is([data-icon="play"], [data-icon="chevron"], [data-icon="logout"]) { --icon-x: 12%; }
+svg[data-icon="stop"] { --icon-grow: -.12; }
+svg[data-icon="down"], svg[data-icon="download"] > [data-icon-part="arrow"] { --icon-y: 12%; }
+svg[data-icon="up"] { --icon-y: -12%; }
+svg[data-icon="restart"] { --icon-turn: -360deg; --icon-time: 560ms; }
+svg[data-icon="refresh"] { --icon-turn: 180deg; --icon-time: 460ms; }
+svg[data-icon="resume"] > [data-icon-part="loop"] { --icon-turn: -40deg; --icon-time: 320ms; }
+svg[data-icon="resume"] > [data-icon-part="hand"] { --icon-turn: -100deg; --icon-time: 320ms; }
+svg:is([data-icon="plus"], [data-icon="x"]) { --icon-turn: 90deg; --icon-time: 300ms; }
+svg[data-icon="minus"] { --icon-grow-x: -.25; }
+svg[data-icon="search"] { --icon-turn: -12deg; --icon-grow: .1; --icon-origin: 43.75% 43.75%; }
+svg[data-icon="external"] { --icon-x: 12%; --icon-y: -12%; }
+svg[data-icon="box"] { --icon-y: -7%; }
+svg[data-icon="file"] { --icon-y: -6%; }
+svg[data-icon="file"] > [data-icon-part="fold"] { --icon-grow: .25; --icon-origin: 79% 12.5%; }
+svg[data-icon="panel"] > [data-icon-part="divider"] { --icon-x: -12%; }
+svg[data-icon="dock"] > [data-icon-part="shelf"] { --icon-y: -14%; }
+svg[data-icon="overview"] > [data-icon-part="tl"], svg[data-icon="maximize"] > [data-icon-part="tl"], svg[data-icon="minimize"] > [data-icon-part="br"] { --icon-x: -6%; --icon-y: -6%; }
+svg[data-icon="overview"] > [data-icon-part="tr"], svg[data-icon="maximize"] > [data-icon-part="tr"], svg[data-icon="minimize"] > [data-icon-part="bl"] { --icon-x: 6%; --icon-y: -6%; }
+svg[data-icon="overview"] > [data-icon-part="br"], svg[data-icon="maximize"] > [data-icon-part="br"], svg[data-icon="minimize"] > [data-icon-part="tl"] { --icon-x: 6%; --icon-y: 6%; }
+svg[data-icon="overview"] > [data-icon-part="bl"], svg[data-icon="maximize"] > [data-icon-part="bl"], svg[data-icon="minimize"] > [data-icon-part="tr"] { --icon-x: -6%; --icon-y: 6%; }
+svg[data-icon="overview"] > [data-icon-part] { --icon-time: 240ms; }
+svg[data-icon="workspace"] > [data-icon-part="split"] { --icon-grow-x: .2; --icon-origin: 87.5% 50%; }
+svg[data-icon="context"] > [data-icon-part="lines"] { --icon-grow-x: .3; --icon-origin: 35.4% 50%; }
+svg[data-icon="work"] > [data-icon-part="lines"] { --icon-x: 6%; }
+svg[data-icon="editor"] > [data-icon-part="left"] { --icon-x: -10%; }
+svg[data-icon="editor"] > [data-icon-part="right"] { --icon-x: 10%; }
+svg[data-icon="trash"] > [data-icon-part="lid"] { --icon-y: -9%; --icon-turn: -10deg; --icon-origin: 14.6% 27%; }
+svg[data-icon="dots"] { --icon-grow-x: .14; }
+svg[data-icon="timer"] > [data-icon-part="hand"] { --icon-turn: 120deg; --icon-time: 420ms; --icon-origin: 50% 56.25%; }
+svg[data-icon="pencil"] { --icon-turn: -12deg; --icon-origin: 14.6% 85.4%; }
+svg[data-icon="github"] > [data-icon-part="tail"] { --icon-turn: -20deg; --icon-origin: 37.5% 75%; }
+svg[data-icon="commit"] > [data-icon-part="node"] { --icon-grow: .28; }
+svg[data-icon="graph"] > [data-icon-part="top"] { --icon-y: -6%; }
+svg[data-icon="graph"] > [data-icon-part="bottom"] { --icon-y: 8%; }
+svg[data-icon="star"] { --icon-turn: 72deg; --icon-grow: .12; --icon-time: 420ms; }
+svg[data-icon="leaf"] { --icon-turn: -10deg; --icon-origin: 20.8% 79%; }
+svg[data-icon="wrench"] { --icon-turn: -25deg; }
+svg[data-icon="layers"] > [data-icon-part="top"] { --icon-y: -10%; }
+svg[data-icon="layers"] > [data-icon-part="bottom"] { --icon-y: 8%; }
+svg[data-icon="sparkle"] > [data-icon-part="big"] { --icon-grow: .15; --icon-origin: 43.75% 41.7%; }
+svg[data-icon="sparkle"] > [data-icon-part="small"] { --icon-turn: 90deg; --icon-grow: .2; --icon-origin: 75% 75%; --icon-time: 360ms; }
+svg[data-icon="flask"] { --icon-turn: 9deg; --icon-origin: 50% 85%; }
+/* one-shot gestures where a pose would not say it: a line drawn, an eye that blinks, a bell that
+   rings, a lock that latches, a cursor that blinks. They end at rest, so leaving never jumps far. */
+svg:is([data-icon="activity"], [data-icon="check"]) { --icon-play: icon-draw 560ms var(--ease) both; }
+svg[data-icon="eye"] { --icon-play: icon-blink 380ms var(--ease) both; }
+svg[data-icon="bell"] > [data-icon-part="bell"] { --icon-play: icon-ring 620ms var(--ease) both; --icon-origin: 50% 10%; }
+svg[data-icon="bell"] > [data-icon-part="clapper"] { --icon-play: icon-swing 620ms var(--ease) both; }
+svg[data-icon="lock"] > [data-icon-part="shackle"] { --icon-play: icon-latch 420ms var(--ease) both; }
+svg[data-icon="terminal"] > [data-icon-part="cursor"] { --icon-play: icon-cursor 900ms steps(1, end) both; }
+@keyframes icon-draw { from { stroke-dasharray: 1 1; stroke-dashoffset: .999; } to { stroke-dasharray: 1 1; stroke-dashoffset: 0; } }
+@keyframes icon-blink { 0%, 100% { transform: scaleY(1); } 45% { transform: scaleY(.1); } }
+@keyframes icon-ring { 0%, 100% { transform: rotate(0); } 18% { transform: rotate(15deg); } 38% { transform: rotate(-12deg); } 58% { transform: rotate(7deg); } 78% { transform: rotate(-3deg); } }
+@keyframes icon-swing { 0%, 100% { transform: translateX(0); } 22% { transform: translateX(-7%); } 42% { transform: translateX(6%); } 62% { transform: translateX(-3%); } 82% { transform: translateX(1%); } }
+@keyframes icon-latch { 0%, 100% { transform: translateY(0); } 45% { transform: translateY(-13%); } 75% { transform: translateY(2%); } }
+@keyframes icon-cursor { 0%, 50% { opacity: 0; } 25%, 75% { opacity: 1; } }
 @media (hover: hover) and (pointer: fine) {
-  :where(.v2-navlinks > .rail-link, .v2-command, .p-nav > a, .p-nav > button, .v2-add, .v2-scan,
-         .project-card-open, .project-card-resume, .page-head .btn, .p-head .actions .btn):hover:not(:disabled, .busy, .danger, [aria-disabled="true"], [aria-busy="true"]) { --icon-engaged: 1; }
+  :where(a, button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]):hover:not(:disabled, .busy, [aria-disabled="true"], [aria-busy="true"]) { --icon-engaged: 1; }
+  :where(a, button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]):hover:not(:disabled, .busy, [aria-disabled="true"], [aria-busy="true"]) > svg[data-icon] > path { animation: var(--icon-play, none); }
 }
-:where(.v2-navlinks > .rail-link, .v2-command, .p-nav > a, .p-nav > button, .v2-add, .v2-scan,
-       .project-card-open, .project-card-resume, .page-head .btn, .p-head .actions .btn):focus-visible:not(:disabled, .busy, .danger, [aria-disabled="true"], [aria-busy="true"]) { --icon-engaged: 1; }
-:where(.v2-navlinks > .rail-link, .v2-command, .p-nav > a, .p-nav > button, .v2-add, .v2-scan,
-       .project-card-open, .project-card-resume, .page-head .btn, .p-head .actions .btn):active:not(:disabled, .busy, .danger, [aria-disabled="true"], [aria-busy="true"]) { --icon-engaged: .45; }
+:where(a, button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]):focus-visible:not(:disabled, .busy, [aria-disabled="true"], [aria-busy="true"]) { --icon-engaged: 1; }
+:where(a, button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]):focus-visible:not(:disabled, .busy, [aria-disabled="true"], [aria-busy="true"]) > svg[data-icon] > path { animation: var(--icon-play, none); }
+:where(a, button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]):active:not(:disabled, .busy, [aria-disabled="true"], [aria-busy="true"]) { --icon-engaged: .45; }
 @media (prefers-reduced-motion: reduce) {
-  :where(.v2-navlinks > .rail-link, .v2-command, .p-nav > a, .p-nav > button, .v2-add, .v2-scan,
-         .project-card-open, .project-card-resume, .page-head .btn, .p-head .actions .btn) > svg[data-icon] > path:not([data-icon-part="fixed"]) { transform: none; transition: none; }
+  :where(a, button, summary, [role="button"], [role="tab"], [role="menuitem"], [role="option"]) > svg[data-icon] > path { transform: none !important; transition: none !important; animation: none !important; }
 }
 /* content scale: 100% in Settings is drawn at --ui-base (the v2 layout reads small at 1:1); the
    page column keeps the width of the top bar's whatever the scale, so the two stay aligned */
@@ -334,7 +385,6 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
   .rail { flex-wrap: wrap; gap: 0 9px; padding: 9px 18px 8px; align-content: space-between; }
   .rail-brand { margin: 0; height: 36px; }
   .rail-brand .brand-name { display: inline; font-size: 17px; }
-  .v2-version { font-size: 10px; }
   .v2-navlinks { order: 5; width: calc(100vw - 36px); overflow-x: auto; scrollbar-width: none; gap: 3px; padding-right: 32px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
   .v2-navlinks::-webkit-scrollbar { display: none; }
   .rail-link { flex: none; height: 35px; padding: 0 10px; gap: 6px; }
@@ -347,7 +397,6 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 @media (max-width: 480px) { .rail .led-timer > svg { display: none; } }
 @media (max-width: 420px) { .rail:has(.led-clock.is-timer) .brand-name { display: none; } }
 @media (max-width: 400px) { .rail .led-sec { display: none; } .rail-brand { gap: 8px; } .timer-custom { flex-wrap: wrap; } .timer-custom .btn { flex: 1 0 100%; margin-left: 0; } }
-@media (max-width: 340px) { .v2-version { display: none; } }
 @media (max-width: 680px) {
   .look-swatch { width: 74px; height: 50px; }
   .look-scene { width: 138px; height: 78px; }

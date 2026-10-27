@@ -341,13 +341,21 @@ try {
   await page.waitForFunction(() => ![...document.querySelectorAll('.v2-navlinks a')].some((a) => a.textContent.includes('Agents') && a.offsetWidth));
   assert.equal(await page.locator('.project-card').count(), 9);
   pass('Profile changes preserve the home and hide disabled agent features');
+  await api('/api/settings', 'PATCH', { appearance: { scene: 'night-sky' } });
   await page.getByRole('button', { name: 'Lock FlintBench', exact: true }).click();
   await page.getByLabel('Password', { exact: true }).waitFor();
   assert.equal(await page.locator('.project-card').count(), 0);
+  // a browser that never saw the console (no cached look) still gets the background from the server
+  await page.evaluate(() => localStorage.removeItem('flintbench:appearance'));
+  await page.reload();
+  await page.getByLabel('Password', { exact: true }).waitFor();
+  await page.waitForFunction(() => document.querySelector('.auth') && document.querySelector('.scene[data-scene="night-sky"] video'));
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: /Unlock|Sign in/ }).click();
   await page.locator('.project-card').first().waitFor();
-  pass('Lock clears project data from the DOM and password unlock restores it');
+  await api('/api/settings', 'PATCH', { appearance: { scene: 'none' } });
+  await page.waitForFunction(() => !document.querySelector('.scene'));
+  pass('Lock clears project data from the DOM, the sign-in wears the video background, password unlock restores it');
   assert.deepEqual(errors, [], 'Runtime or console errors');
   pass('No browser runtime errors');
   const result = { result: 'PASS', checks, warnings, errors, browser: { name: 'Chromium', version: browser.version(), desktop: '1600x1060, mouse and keyboard', mobile: '390x844, touch emulation', reducedMotion: 'reduce and no-preference' }, unverified: ['Physical touch device', 'Safari', 'Firefox', 'Screen reader'], note: 'Browser Chromium; isolated QA projects. Activity checks send simulated agent/editor records through the real WebSocket channel and edit real fixture files. External editor launch, live GitHub mutations, Docker and AI agent execution are not exercised.' };

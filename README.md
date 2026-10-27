@@ -9,9 +9,9 @@
 A local control center for developers: your projects, their Git state, what is running, your editors,
 your AI agents and your GitHub repositories, one click away. It runs on `localhost` and never phones home.
 
-![Version 0.2](https://img.shields.io/badge/version-0.2%20%C2%B7%20v2-7c8cff)
+![Version 0.2](https://img.shields.io/badge/version-0.2-7c8cff)
 ![Node.js 24.7+](https://img.shields.io/badge/node-%E2%89%A5%2024.7-3c873a?logo=nodedotjs&logoColor=white)
-![Windows · macOS · Linux](https://img.shields.io/badge/platform-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-4b5563)
+![Desktop: Windows · macOS · Linux](https://img.shields.io/badge/desktop-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-4b5563)
 ![Local only](https://img.shields.io/badge/runs-localhost%20only-f28c2e)
 ![No telemetry](https://img.shields.io/badge/telemetry-none-111827)
 ![License: MIT](https://img.shields.io/badge/license-MIT-2563eb)
@@ -43,7 +43,7 @@ Version 2 redesigns the whole console around a new home made of project cards, a
 a live background and an always-on clock. Everything from v1 (services, terminals, Git, GitHub,
 agents, profiles) works as before.
 
-- **A home made of cards.** Four columns on a wide screen down to one on a phone. Each card shows
+- **A home made of cards.** Up to four columns, following the width of the window. Each card shows
   the project's state, its real description (from `package.json`), a Start/Stop switch, *Open*,
   branch and uncommitted changes, the last commit and *Resume*. A `⋯` menu and right-click give
   editors, agents, files and project management.
@@ -53,10 +53,10 @@ agents, profiles) works as before.
 - **Search, sort and quick filters** above the grid: all, running, need attention, agents active,
   uncommitted. Newly detected projects wait in a collapsible section under the grid.
 - **Top navigation** instead of the side rail, with the command palette, the clock and the lock
-  always in reach; on small screens it folds onto two rows.
+  always in reach.
 - **Six colour themes** (Graphite, Blue hour, Pine, Dusk, Ember, Carbon), each dark and light, plus
   any accent colour you like.
-- **Video backgrounds**, each in a seamless loop and also behind the lock screen:
+- **Video backgrounds**, each in a seamless loop, also behind the sign-in and lock screen:
   - **Blue hour**: a city skyline over a calm river just after sunset;
   - **Night sky**: clouds drifting over a town at dusk, in time-lapse;
   - **Fireworks**: New Year's fireworks over Dubai;
@@ -76,6 +76,10 @@ agents, profiles) works as before.
   volume, auto-lock).
 - **Project terminal beside the project menu**, also full screen, with animated open, close,
   maximise and restore.
+- **Redrawn, living icons.** One icon set on a 24 grid with rounded corners and a stroke that stays
+  crisp at every size. Hover or focus a button, tab or menu item and the meaningful part of its icon
+  moves: the home door opens, the arrow of *Open* leaves its frame, the sliders of Settings slide,
+  the bell rings, the lock latches, the Activity line draws itself. Still with reduced motion.
 
 ## A tour
 
@@ -130,11 +134,6 @@ agents, profiles) works as before.
   </tr>
 </table>
 
-<p align="center">
-  <img src="docs/screenshots/home-mobile.webp" alt="FlintBench home on a phone: one column of cards" width="300">
-  <br><sub>On a phone: one column, the navigation scrolls under the brand and the clock.</sub>
-</p>
-
 ## Highlights
 
 | | |
@@ -169,6 +168,9 @@ Answer *No* to "Do you build with AI agents?" and every agent button, tab and se
 whatever the profile.
 
 ## Quick start
+
+FlintBench is a desktop tool: open it in a browser on the computer it runs on. Phones and tablets
+are not supported for now.
 
 **Requirements**
 
@@ -263,11 +265,12 @@ node qa/verify.mjs
 
 An end-to-end check in Chromium with real HTTP, Git, PTY and WebSocket: account creation, cards,
 live activity, search and filters, start/stop, themes, the Blue hour background, profiles, the
-terminal, lock and unlock, at eight widths from 320 to 1920 px, with and without reduced motion.
+icon motion, terminal, lock and unlock with the background on the sign-in, with and without
+reduced motion.
 It needs Playwright with Chromium (`npm install --no-save playwright` then
 `npx playwright install chromium`, or point `FLINTBENCH_PLAYWRIGHT` at an existing install). It
 runs on port 4488 with its own data and fixture repositories in `qa/.runs/`, and writes its report
-to [docs/v2/verification.json](docs/v2/verification.json). Design notes for v2 are in
+to [docs/v2/verification.json](docs/v2/verification.json). Design notes are in
 [PROJECT-DESIGN.md](PROJECT-DESIGN.md).
 
 ## Built with

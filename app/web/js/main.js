@@ -7,7 +7,7 @@ import { mountShell } from './views/shell.js';
 import { disposeAllTerminals } from './terminal/dock.js';
 import { runBoot } from './views/boot.js';
 import { play } from './lib/sound.js';
-import { applyTheme, applyCachedAccent, applyDensity, applySettingsLook } from './lib/theme.js';
+import { applyTheme, applyCachedAccent, applyDensity, applyAppearance, applySettingsLook } from './lib/theme.js';
 import { runSetupWizard } from './views/wizard.js';
 
 const root = document.getElementById('root');
@@ -44,12 +44,13 @@ async function showLock() {
   });
 }
 
-/** Loading, setup and unlock wear the owner's theme, accent and background (the defaults on first run). */
+/** Loading, setup and unlock wear the owner's theme, accent, background and video scene (the defaults on first run). */
 function wearAppearance(state) {
   const a = state?.appearance;
   if (!a) return;
   applyTheme(a.theme, a.accent ?? '', a.background ?? 'none', a.profile ?? 'builder', a.uiScale ?? 1);
   applyDensity(a.density);
+  if (a.look) applyAppearance(a.look);
 }
 
 /** Terminals measure their cells once: the bundled fonts must be ready before the console opens. */

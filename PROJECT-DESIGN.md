@@ -96,6 +96,16 @@ Richiesta: rendere vive le icone dove ha senso, al passaggio sul controllo o dir
 - Implementazione: CSS sui tratti SVG, senza listener o cicli JavaScript, senza spostare controllo, label o focus ring. Hover limitato a puntatore fine; focus da tastiera indipendente; pressione anche su touch; nessuna risposta per controlli disabilitati, occupati o distruttivi. Con reduced motion i tratti restano completamente fermi e rimangono i normali segnali di focus e selezione.
 - Verifica: `qa/icon-motion.mjs`, eseguito da `qa/verify.mjs`, controlla il trigger sul testo e sul simbolo, le parti fisse, la stabilità dell'area cliccabile dopo l'assestamento della home, focus e attivazione da tastiera, pressione, ingressi rapidi, condizioni disabled/busy simulate, movimento ridotto e navigazione con touch emulato. Il polling dell'host può cancellare l'editor simulato: il test live ripubblica il fixture subito prima di verificarlo, mantenendo l'asserzione originale sul testo VS Code. La suite completa copre 31 controlli; immagini `docs/v2/icon-motion-desktop.png` e `icon-motion-mobile.png`. Safari, Firefox, dispositivi fisici e screen reader non verificati.
 
+## Revisione: icone ridisegnate e animate ovunque
+
+Richiesta: icone di qualità più alta, animate dai pulsanti alle sezioni (`velora-design`, riferimento icon-motion); niente "v2" nel marchio; sfondo personalizzato anche nel login.
+
+- Disegno: set ridisegnato su griglia 24 con raggi di 2 unità, cerchi e riquadri veri (non più tratti da .01), giunzioni tonde. Lo spessore dipende dalla dimensione (`36 / size`, fra 1,75 e 2,6 unità): circa 1,5 px a schermo da 11 a 22 px, invece di 0,9 px a 14 px. I tre punti sono pieni. GitHub resta il segno Lucide.
+- Ambito: qualunque link, pulsante, tab o voce di menu che contiene un'icona come figlio diretto. Card, metadati, segnali live e marchio restano fermi perché non sono controlli. Ora si animano anche le azioni distruttive: il coperchio del cestino si alza, ma non simula l'esito.
+- Movimento per parte: porta di Home che si apre, aletta della cartella, raggi Agents a 45° con il nucleo che cresce, cursori Settings in opposizione, freccia Open, lancetta di Resume e Timer, riquadri Overview che si separano, parentesi dell'editor che si aprono, angoli di maximize/minimize, Refresh a 180°, Restart a 360°, Plus e X a 90°. Gesti una tantum dove una posa non basta: Activity e Check si disegnano, l'occhio sbatte la palpebra, la campana suona, il lucchetto scatta, il cursore del terminale lampeggia. Le animazioni finiscono a riposo e non lasciano code.
+- Ingressi invariati: hover solo con puntatore fine, focus da tastiera, pressione a metà corsa, niente per disabled/busy, tutto fermo con reduced motion.
+- Login: `/api/auth/state` include `look` (palette, scena, sfocatura, trasparenza) e lo sfondo video compare anche in un browser che non ha mai aperto la console. Verificato in `qa/verify.mjs`.
+
 ## Confini della copia
 
 L'originale non viene modificato. La v2 conserva una copia della lista dei progetti, delle impostazioni e dei metadati dei progetti. Gli stessi percorsi continuano a indicare le vere cartelle sul computer: comandi, modifiche Git e azioni sui file agiscono su quei progetti.

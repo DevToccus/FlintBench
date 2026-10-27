@@ -79,7 +79,7 @@ export async function verifyIconMotion(page, context, artifacts, pass) {
   await card.hover({ position: { x: 8, y: 30 } });
   assert.ok((await matrix(arrow)).rest, 'Card hover must not activate nested actions');
   const resume = page.locator('.project-card-resume').first();
-  const resumeInk = resume.locator('path');
+  const resumeInk = resume.locator('path[data-icon-part="loop"]');
   await resume.evaluate((el) => { el.disabled = true; });
   await resume.hover({ force: true }); await settle(resumeInk);
   assert.ok((await matrix(resumeInk)).rest, 'Disabled controls must stay still');

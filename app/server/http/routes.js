@@ -4,7 +4,7 @@ import { Router, sessionCookie, clearCookie } from './server.js';
 import { httpError } from '../host/paths.js';
 import { defaultSettings } from '../settings/defaults.js';
 import { pick } from '../host/picker.js';
-import { isUiScale } from '../../web/js/lib/appearance.js';
+import { isUiScale, normalizeAppearance } from '../../web/js/lib/appearance.js';
 import { resolveProfile } from '../../web/js/lib/profiles.js';
 import { editorCommands } from '../../web/js/lib/editors.js';
 
@@ -24,12 +24,12 @@ export function createRoutes(app) {
   const r = new Router();
 
   /* ---------- auth ---------- */
-  // the look (theme, accent, background) is public so loading, setup and unlock wear the owner's choice
+  // the look (theme, accent, background, colour theme, video scene) is public so loading, setup and unlock wear the owner's choice
   // the lock screen wears the profile's style before any settings are loaded
   const appearance = () => {
     const s = settings.get();
     const { style } = resolveProfile(s);
-    return { theme: s.theme, accent: style.accent, background: style.background, density: style.density, profile: s.profile, uiScale: isUiScale(s.uiScale) ? s.uiScale : 1 };
+    return { theme: s.theme, accent: style.accent, background: style.background, density: style.density, profile: s.profile, uiScale: isUiScale(s.uiScale) ? s.uiScale : 1, look: normalizeAppearance(s.appearance) };
   };
   r.get('/api/auth/state', ({ token }) => ({ ...auth.state(token), appearance: appearance() }), 'public');
   r.post('/api/auth/setup', async ({ body, userAgent, setCookie }) => {
