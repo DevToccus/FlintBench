@@ -180,8 +180,8 @@ whatever the profile.
 **Run**
 
 ```bash
-git clone https://github.com/veloranetwork8x/flintbench.git
-cd flintbench
+git clone https://github.com/DevToccus/FlintBench.git
+cd FlintBench
 npm install
 npm start            # then open http://localhost:4477
 ```
