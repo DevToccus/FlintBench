@@ -2,18 +2,17 @@ import { h, icon, replace, actionButton } from '../lib/dom.js';
 import { store, subscribe, prefs, notify } from '../lib/store.js';
 import { api, projectUrl } from '../lib/api.js';
 import { navigate, projectPath } from '../lib/router.js';
-import { ago, plural, shortPath, duration } from '../lib/format.js';
-import { statusDot, attempt, nowState, projectMoving, agentWorking, FILES_MOVING_MS } from '../lib/ui.js';
+import { plural } from '../lib/format.js';
+import { statusDot, attempt, FILES_MOVING_MS } from '../lib/ui.js';
 import { addRootForm } from './settings.js';
-import { greeting } from '../lib/sound.js';
-import { toolMarks, agentMark } from '../lib/agent-icons.js';
+import { projectCard } from './home-card.js';
+import { agentMark } from '../lib/agent-icons.js';
 import { contextMenu, copyText } from '../lib/menu.js';
 import { toast } from '../lib/ui.js';
 import { removeProject } from './projects.js';
 import { has, agentsInUse } from '../lib/feature.js';
 import { editorItems } from '../lib/editor-menu.js';
 import { selectMenu } from '../lib/select-menu.js';
-import { AWAY_MS } from './project/briefing.js';
 import { closedNotice, dismissClosed, reopenConversation, moveHere } from './project/agent-panel.js';
 import { resumeWork } from '../lib/resume.js';
 import { relocationText, relocationActions } from '../lib/relocation.js';
@@ -126,28 +125,7 @@ export async function resumeProject(p) {
   if (r.agentTerminal) setTimeout(() => window.dispatchEvent(new CustomEvent('flintbench:show-tab', { detail: { projectId: p.id, tabId: r.agentTerminal.id } })), 0);
 }
 
-function changesText(g) {
-  if (!g?.isRepo) return { text: 'no git', cls: 'faint' };
-  const branch = g.detached ? 'detached' : g.branch;
-  return { text: g.changed ? `${branch} · ${plural(g.changed, 'change')}` : `${branch} · clean`, cls: g.changed ? 'change-text' : 'dim' };
-}
-
 const LIVE_WINDOW = 10 * 60_000;
-
-/** A project is active while an agent works on it, a service runs, or its files changed in the last 10 minutes. */
-function isLive(p, now = Date.now()) {
-  return p.exists && Boolean(p.agents?.active?.length || p.editors?.length || p.running || now - (p.activity?.lastFileChangeAt ?? 0) < LIVE_WINDOW);
-}
-
-/** What is running for a project: "localhost:3000", "web, api", "2 containers"… or null. */
-function runningText(p) {
-  if (!p.running) return null;
-  const port = p.runtime?.ports?.[0];
-  const services = (p.runtime?.services ?? []).filter((x) => x.status === 'running').map((x) => x.name);
-  const containers = p.docker?.running ?? 0;
-  const parts = [services.length ? services.join(', ') : null, containers ? plural(containers, 'container') : null].filter(Boolean);
-  return [parts.join(' · ') || (port ? null : 'process'), port ? `localhost:${port}` : null].filter(Boolean).join(' · ');
-}
 
 /**
  * The live signal, in the style of the tool at work: Claude Code's spark (the glyphs it cycles
@@ -173,141 +151,6 @@ export function liveSignal(kind) {
       frames.glyphs.map((g, i) => h('span', { style: { animationDuration: `${frames.cycle}s`, animationDelay: `${((i * frames.cycle) / 10 - frames.cycle).toFixed(2)}s` } }, g)));
   }
   return h(`span.live-signal.is-${look}`, { 'aria-hidden': 'true' }, '▍');
-}
-
-function liveModel(p, now) {
-  const agents = p.agents?.active ?? [];
-  const editors = p.editors ?? [];
-  const tools = [...new Set(agents.map((s) => s.agent)), ...editors.map((e) => e.id)];
-  const names = [...new Set(agents.map((s) => s.agentName)), ...editors.map((e) => e.name)];
-  const since = Math.min(...agents.map((s) => s.startedAt), ...editors.map((e) => e.since ?? Infinity));
-  const changing = now - (p.activity?.lastFileChangeAt ?? 0) < LIVE_WINDOW;
-  const moving = projectMoving(p, now);
-  const service = runningText(p);
-  const g = p.git;
-  const what = names.length
-    ? `${names.join(' + ')}${Number.isFinite(since) ? ` · ${duration(now - since)}` : ''}${moving ? '' : ' · idle'}`
-    : changing ? `${moving ? 'Files changing' : 'Files changed'} · ${ago(p.activity.lastFileChangeAt)}` : `Running · ${service}`;
-  // which tool's signal: the agent answering, else files changing by hand or in an editor
-  const answering = agents.find((s) => agentWorking(s, now));
-  const signal = !moving ? 'idle' : answering ? answering.agent : 'edit';
-  return {
-    name: p.name,
-    tools,
-    signal,
-    tone: agents[0] ? agents[0].agent : editors[0] ? editors[0].id : changing ? '' : 'running',
-    working: Boolean(names.length || changing),
-    // the bars move while an agent answers or files change; they rest while the tools wait
-    idle: Boolean(names.length || changing) && !moving,
-    what,
-    service: names.length || changing ? service : null,
-    meta: changesText(g).text,
-  };
-}
-
-function liveCard(p, m, isNew) {
-  const card = h(`a.live-card${m.tone ? `.is-${m.tone}` : ''}${m.idle ? '.is-idle' : m.working ? '.is-moving' : ''}${isNew ? '.is-new' : ''}`, { href: projectPath(p.id), 'aria-label': `${p.name}: ${m.idle ? 'open, idle' : 'active'}, ${m.what}${m.service ? `, running ${m.service}` : ''}. Right-click for VS Code and agent sessions.` },
-    h('div.live-top', m.tools.length ? toolMarks(m.tools, 18) : icon(m.working ? 'activity' : 'play', 15), h('strong.ellipsis', p.name), h('span.spacer'), m.working ? liveSignal(m.signal) : null),
-    h('div.live-what', m.what),
-    m.service ? h('div.live-svc', statusDot('ok', 'Service running'), h('span.ellipsis', `Running · ${m.service}`)) : null,
-    h('div.live-meta.mono', m.meta));
-  contextMenu(card, () => projectMenuItems(store.project(p.id) ?? p), { label: `${p.name} tools` });
-  return card;
-}
-
-/**
- * "Active": the projects being worked on or running right now. Cards are patched in place —
- * an unchanged card keeps its element, so its bars and colours never restart on updates.
- */
-function liveStrip() {
-  const grid = h('div.live-grid');
-  const el = h('section.indev', { 'aria-label': 'Projects active now', hidden: true }, grid);
-  let cards = new Map(); // id -> { sig, card }
-  return {
-    el,
-    update(all) {
-      const now = Date.now();
-      const live = all.filter((p) => isLive(p, now)).sort((a, b) => (b.agents?.active?.length ?? 0) - (a.agents?.active?.length ?? 0)
-        || Number(Boolean(b.running)) - Number(Boolean(a.running))
-        || (b.activity?.lastFileChangeAt ?? 0) - (a.activity?.lastFileChangeAt ?? 0));
-      el.hidden = !live.length;
-      const next = new Map();
-      live.slice(0, 6).forEach((p, i) => {
-        const m = liveModel(p, now);
-        const sig = JSON.stringify({ ...m, what: '' }); // the timer text alone is patched, not rebuilt
-        const old = cards.get(p.id);
-        const card = old?.sig === sig ? old.card : liveCard(p, m, !old);
-        if (old && old.card !== card) old.card.replaceWith(card);
-        const what = card.querySelector('.live-what');
-        if (what.textContent !== m.what) what.textContent = m.what;
-        if (grid.children[i] !== card) grid.insertBefore(card, grid.children[i] ?? null);
-        next.set(p.id, { sig, card });
-      });
-      for (const [id, { card }] of cards) if (!next.has(id)) card.remove();
-      cards = next;
-    },
-  };
-}
-
-function projectRow(p) {
-  const now = nowState(p);
-  const changes = changesText(p.git);
-  const row = h(`article.prow${isLive(p) ? '.is-live' : ''}`, {
-    tabindex: 0,
-    dataset: { id: p.id },
-    'aria-label': `${p.name}: ${now.text}`,
-    onclick: () => navigate(projectPath(p.id)),
-    onkeydown: (e) => {
-      if (e.target !== row) return;
-      if (e.key === 'Enter') navigate(projectPath(p.id));
-      else if (e.key === 'r') resumeProject(p);
-    },
-  },
-  h('div.cell.c-name',
-    h('div.name', h('span.ellipsis', p.name)),
-    h('div.meta', (p.stack ?? []).slice(0, 3).map((x) => h('span.tag', x)))),
-  h('div.cell.c-now', h('div.line', now.marks?.length ? toolMarks(now.marks, 16) : statusDot(now.dot, now.text), h(`span.ellipsis.${now.cls}`, now.text))),
-  h('div.cell.c-git', h('div.line', icon('branch', 13), h(`span.ellipsis.mono.${changes.cls}`, changes.text))),
-  h('div.cell.c-time', h('div.line.dim', { title: p.activity?.lastActivityAt ? new Date(p.activity.lastActivityAt).toLocaleString() : 'No activity recorded yet' }, ago(p.activity?.lastActivityAt))),
-  h('div.actions',
-    p.running
-      ? actionButton('Stop', () => stopProject(p), { cls: 'btn sm', title: `Stop ${p.name}` })
-      : actionButton('Start', () => startProject(p), { cls: 'btn sm', title: canStart(p) ? `Start ${p.name}` : 'Nothing to start yet — define a service in the project', disabled: !p.exists || !canStart(p) }),
-    actionButton('Resume', () => resumeProject(p), { cls: 'btn sm', title: 'Reopen the last agent conversation, start the services that were running and restore your terminals (r)', disabled: !p.exists }),
-    h('span.prow-go', { 'aria-hidden': 'true' }, icon('chevron', 14))));
-  contextMenu(row, () => projectMenuItems(p), { label: `${p.name} actions` });
-  return row;
-}
-
-/**
- * Project Memory on Home: projects you stepped away from, most recent first, each
- * with its clue for picking it up again. Opening one shows its "Welcome back" briefing.
- */
-function resumeStrip(all) {
-  const now = Date.now();
-  const away = all
-    // a conversation cut off by a shutdown is listed right away, however recent
-    // a conversation that just ended has its own notice above: not listed twice
-    .filter((p) => !closedNotice(p, now))
-    .filter((p) => p.exists && !isLive(p, now) && p.activity?.lastActivityAt && (now - p.activity.lastActivityAt >= AWAY_MS || p.agents?.cutOff))
-    .sort((a, b) => b.activity.lastActivityAt - a.activity.lastActivityAt)
-    .slice(0, 4);
-  if (!away.length) return null;
-  const clue = (p) => {
-    const last = p.agents?.last;
-    const cut = p.agents?.cutOff;
-    if (cut) return [agentMark(cut.agent, 14), h('span.warn-text', `${cut.agentName} interrupted`)];
-    if (last) return [agentMark(last.agent, 14), `Last with ${last.agentName}${last.task ? ` · ${last.task}` : ''}`];
-    if (p.git?.lastCommit) return [icon('commit', 13), `“${p.git.lastCommit.subject}”`];
-    return [icon('activity', 13), 'Files changed'];
-  };
-  return h('section.resume-strip', { 'aria-label': 'Pick up where you left off' },
-    h('div.resume-title', h('span.label', 'Pick up where you left off')),
-    h('div.resume-grid', away.map((p) => h('a.resume-card', { href: projectPath(p.id) },
-      h('div.resume-top', h('strong.ellipsis', p.name), h('span.resume-away', ago(p.activity.lastActivityAt))),
-      h('div.resume-clue', clue(p)),
-      !p.git?.isRepo ? h('div.resume-open.faint', 'No git')
-        : p.git.changed ? h('div.resume-open.change-text', `${plural(p.git.changed, 'file')} not committed`) : h('div.resume-open.faint', 'Everything committed')))));
 }
 
 /**
@@ -406,39 +249,40 @@ export function mount(container) {
   let sort = prefs.get(sortKey, 'recent');
   let query = '';
 
-  const telemetry = h('div.telemetry');
-  const live = liveStrip();
-  const resume = h('div');
+  const telemetry = h('div.v2-filter-group', { 'aria-label': 'Filter projects' });
   const closed = h('div');
   const moved = h('div');
   const inbox = h('div');
-  const rows = h('div');
+  const rows = h('div', { 'aria-live': 'polite', 'aria-label': 'Project results' });
   const search = h('input.input', { type: 'search', placeholder: 'Search projects', 'aria-label': 'Search projects', 'data-search': true, spellcheck: false });
   const sortMenu = selectMenu({
     label: 'Sort projects by', prefix: 'Sort', width: '220px', value: sort,
     options: [{ value: 'recent', text: 'Recent activity' }, { value: 'status', text: 'Status' }, { value: 'name', text: 'Name' }],
     onChange: (v) => { sort = v; prefs.set(sortKey, sort); render(); },
   });
-  const title = h('h1.greet');
-  const summary = h('p.summary');
+  const summary = h('div.v2-home-summary');
+  const rootPath = h('p.v2-root-path.mono');
+  const note = h('p.v2-home-note');
+  const runningOnly = h('input', { type: 'checkbox', checked: filter === 'running' });
+  runningOnly.addEventListener('change', () => setFilter(runningOnly.checked ? 'running' : 'all'));
+  const detectedTitle = h('summary');
+  const detectedDetails = h('details.v2-home-context', detectedTitle, inbox);
 
-  const view = h('div.view', h('div.view-inner',
-    h('header.page-head.home-head',
-      h('div', title, summary),
-      h('span.spacer'),
-      actionButton('Scan', async () => { await attempt(() => api.post('/api/projects/scan'), { success: 'Scan complete' }); }, { cls: 'btn lg', iconName: 'refresh', title: 'Rescan project directories' }),
-      h('a.btn.primary.lg', { href: '/projects' }, icon('plus', 16), 'Add project')),
+  const view = h('div.view.v2-home', h('div.view-inner',
+    h('header.v2-home-header',
+      h('div', h('p.v2-eyebrow', h('span', { 'aria-hidden': 'true' }), 'Your local workspace'),
+        h('h1.v2-home-title', 'FlintBench', h('span', ' / home')), rootPath),
+      h('div', summary, note)),
     moved,
     closed,
-    live.el,
-    resume,
-    telemetry,
-    inbox,
-    // what to show is chosen in the counters above (each one filters); here: search, then order
-    h('div.toolbar', h('label.search', icon('search', 14), search, h('kbd', '/')), sortMenu.el),
-    rows));
+    h('div.v2-toolbar', h('label.search', icon('search', 14), search, h('kbd', '/')),
+      h('label.v2-running-only', runningOnly, 'Only running'), h('span.spacer'),
+      actionButton('Scan', async () => { await attempt(() => api.post('/api/projects/scan'), { success: 'Scan complete' }); }, { cls: 'btn v2-scan', iconName: 'refresh', title: 'Rescan project directories' }),
+      h('a.btn.v2-add', { href: '/projects' }, icon('plus', 15), 'Add project')),
+    h('div.v2-collection', telemetry, sortMenu.el),
+    rows,
+    detectedDetails));
   container.append(view);
-  let firstPaint = true;
   const previous = new Map(); // telemetry label -> last value, to flash real changes only
 
   function filtered() {
@@ -461,6 +305,7 @@ export function mount(container) {
   function setFilter(f) {
     filter = f;
     prefs.set(filterKey, f);
+    runningOnly.checked = f === 'running';
     render();
   }
 
@@ -479,11 +324,7 @@ export function mount(container) {
 
   function render() {
     const all = [...store.state.projects.values()];
-    // the profile decides whether Home shows the live strip and the counters
-    if (has('home.live')) live.update(all);
-    else live.el.hidden = true;
     scheduleEdge(all);
-    replace(resume, resumeStrip(all));
     replace(closed, closedStrip(all, render));
     replace(moved, movedStrip(all));
     const running = all.filter((p) => p.running).length;
@@ -492,32 +333,28 @@ export function mount(container) {
     const inEditor = all.filter((p) => p.editors?.length).length;
     const dirty = all.filter((p) => p.git?.changed).length;
     const roots = store.state.settings?.roots ?? [];
-    const now = new Date();
-    title.textContent = greeting(now, store.state.auth?.username);
-    const parts = [
-      running ? `${plural(running, 'project')} running` : null,
-      agents && agentsInUse() ? `${plural(agents, 'agent')} at work` : null,
-      inEditor ? `${plural(inEditor, 'project')} open in VS Code` : null,
-      attention ? `${attention} need${attention === 1 ? 's' : ''} attention` : null,
-      dirty ? `${dirty} with uncommitted changes` : null,
-    ].filter(Boolean);
-    summary.textContent = all.length ? (parts.length ? `${parts.join(' · ')}.` : 'All quiet: nothing running, nothing waiting.') : 'No projects yet.';
+    replace(summary, statusDot(running ? 'ok' : '', running ? 'Projects running' : 'Nothing running'), h('strong', `${running} running`), h('span.dim', `out of ${all.length}`));
+    rootPath.textContent = roots.length ? roots.join('  ·  ') : 'All your projects. Right where you left them.';
+    rootPath.title = roots.join('\n');
+    note.textContent = [agents && agentsInUse() ? plural(agents, 'agent') + ' active' : null, inEditor ? plural(inEditor, 'editor') + ' open' : null, attention ? `${attention} need attention` : null].filter(Boolean).join(' · ');
 
     const cell = (label, value, cls, f, unit) => {
       const changed = previous.has(label) && previous.get(label) !== value;
       previous.set(label, value);
-      return h(`button.tcell${cls ? `.${cls}` : ''}${changed ? '.flash' : ''}`, { type: 'button', onclick: () => setFilter(filter === f ? 'all' : f), 'aria-pressed': String(filter === f), title: `Show ${label.toLowerCase()}` },
-        h('span.label', label), h('span.value', String(value), unit ? h('small', unit) : null));
+      return h(`button.v2-filter${changed ? '.flash' : ''}`, { type: 'button', onclick: () => setFilter(filter === f ? 'all' : f), 'aria-pressed': String(filter === f), title: `Show ${label.toLowerCase()}` },
+        label, h('span.v2-filter-count', String(value)));
     };
     telemetry.hidden = !has('home.counters');
     replace(telemetry,
-      cell('Projects', all.length, '', 'all'),
+      cell('All projects', all.length, '', 'all'),
       cell('Running', running, running ? 'is-ok' : '', 'running'),
       cell('Need attention', attention, attention ? 'is-warn' : '', 'attention'),
       agentsInUse() ? cell('Agents active', agents, agents ? 'is-agent' : '', 'agents') : null,
       cell('Uncommitted', dirty, '', 'dirty'));
 
     replace(inbox, candidateInbox(store.state.candidates));
+    detectedDetails.hidden = !visibleCandidates().length;
+    detectedTitle.textContent = `${plural(visibleCandidates().length, 'new project')} detected`;
 
     if (!roots.length && !all.length) {
       replace(rows, h('div.empty-state',
@@ -527,36 +364,40 @@ export function mount(container) {
       return;
     }
     const list = filtered();
-    const focusedId = document.activeElement?.closest?.('.prow')?.dataset.id;
+    const focusedCard = document.activeElement?.closest?.('.project-card');
+    const focusedId = focusedCard?.dataset.id;
+    const focusedControl = focusedCard ? [...focusedCard.querySelectorAll('a, button')].indexOf(document.activeElement) : -1;
     if (!list.length) {
       replace(rows, h('div.empty-state', h('h3', all.length ? 'No projects match' : 'No projects added yet'), h('p', all.length ? 'Change the filter or search.' : 'Add detected projects above, or add one by path in Projects.')));
       return;
     }
-    replace(rows, h(`div.prows${firstPaint ? '.enter' : ''}`, { role: 'list', 'aria-label': 'Projects' },
-      h('div.prows-head', { 'aria-hidden': 'true' }, h('span.label', 'Project'), h('span.label.c-now', 'Now'), h('span.label.c-git', 'Branch'), h('span.label.c-time', 'Last activity'), h('span.actions-pad')),
+    replace(rows, h('div.v2-project-grid', { role: 'list', 'aria-label': 'Projects' },
       list.map((p, i) => {
-        const row = projectRow(p);
+        const row = projectCard(p, { canStart, startProject, stopProject, resumeProject, projectMenuItems, agentsInUse, liveSignal, liveEnabled: has('home.live') });
         row.setAttribute('role', 'listitem');
         row.style.setProperty('--i', String(Math.min(i, 7)));
         return row;
       })));
-    firstPaint = false;
-    if (focusedId) rows.querySelector(`.prow[data-id="${CSS.escape(focusedId)}"]`)?.focus({ preventScroll: true });
+    if (focusedId) {
+      const card = rows.querySelector(`.project-card[data-id="${CSS.escape(focusedId)}"]`);
+      const target = focusedControl >= 0 ? card?.querySelectorAll('a, button')[focusedControl] : card;
+      (target ?? card)?.focus({ preventScroll: true });
+    }
   }
 
   rows.addEventListener('keydown', (e) => {
-    if (!['ArrowDown', 'ArrowUp', 'j', 'k'].includes(e.key) || !e.target.classList.contains('prow')) return;
+    if (!['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'j', 'k'].includes(e.key) || !e.target.classList.contains('project-card')) return;
     e.preventDefault();
-    const all = [...rows.querySelectorAll('.prow')];
+    const all = [...rows.querySelectorAll('.project-card')];
     const idx = all.indexOf(e.target);
-    const next = all[(e.key === 'ArrowDown' || e.key === 'j') ? Math.min(all.length - 1, idx + 1) : Math.max(0, idx - 1)];
+    const next = all[(['ArrowDown', 'ArrowRight', 'j'].includes(e.key)) ? Math.min(all.length - 1, idx + 1) : Math.max(0, idx - 1)];
     next?.focus();
   });
   search.addEventListener('input', () => { query = search.value; render(); });
   search.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      rows.querySelector('.prow')?.focus();
+      rows.querySelector('.project-card')?.focus();
     } else if (e.key === 'Escape') {
       search.value = '';
       query = '';

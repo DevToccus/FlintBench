@@ -5,7 +5,8 @@ import os from 'node:os';
 /**
  * Read-only access to the *metadata* of local agent session files.
  * Contents of conversations are not read for detection; for Codex only the first line's
- * `cwd` field is extracted (the tool records its own working directory there).
+ * `cwd`, `source` and `originator` fields are extracted (the tool records its own working
+ * directory there, and which client opened the session).
  * Transcript content is read only by the opt-in live transcript (Settings › Agents).
  */
 
@@ -289,25 +290,37 @@ export async function codexLastTurn(file) {
   return { turnId: done?.turnId ?? null, message: done?.message ?? null, busy };
 }
 
-const codexCwdCache = new Map();
+const codexMetaCache = new Map();
+const headField = (head, name) => {
+  const m = new RegExp(`"${name}"\\s*:\\s*("(?:[^"\\\\]|\\\\.)*")`).exec(head);
+  return m ? JSON.parse(m[1]) : null;
+};
 
-async function readCodexCwd(file) {
-  if (codexCwdCache.has(file)) return codexCwdCache.get(file);
-  let cwd = null;
+/**
+ * Working directory of a Codex session, and whether a host app opened it: the Codex desktop app
+ * and the IDE extension run one shared `codex app-server` for all their threads, so no process
+ * sits in the session's folder (source "vscode"; the desktop app also names itself as originator).
+ */
+async function readCodexMeta(file) {
+  if (codexMetaCache.has(file)) return codexMetaCache.get(file);
+  let meta = { cwd: null, hosted: false };
+  let complete = false;
   let handle;
   try {
     handle = await fs.open(file, 'r');
     const { buffer, bytesRead } = await handle.read(Buffer.alloc(64 * 1024), 0, 64 * 1024, 0);
-    const head = buffer.subarray(0, bytesRead).toString('utf8').split('\n')[0];
-    const m = /"cwd"\s*:\s*("(?:[^"\\]|\\.)*")/.exec(head);
-    if (m) cwd = JSON.parse(m[1]);
+    const text = buffer.subarray(0, bytesRead).toString('utf8');
+    const head = text.split('\n')[0];
+    complete = text.includes('\n') || bytesRead === 64 * 1024;
+    meta = { cwd: headField(head, 'cwd'), hosted: headField(head, 'source') === 'vscode' || /desktop/i.test(headField(head, 'originator') ?? '') };
   } catch {
-    cwd = null;
+    meta = { cwd: null, hosted: false };
   } finally {
     await handle?.close();
   }
-  codexCwdCache.set(file, cwd);
-  return cwd;
+  // a header caught mid-write is read again at the next scan
+  if (complete) codexMetaCache.set(file, meta);
+  return meta;
 }
 
 export async function listCodexSessions({ since }) {
@@ -331,12 +344,14 @@ export async function listCodexSessions({ since }) {
           const file = path.join(dayDir, entry.name);
           const st = await statSafe(file);
           if (!st || st.mtimeMs < since) continue;
+          const meta = await readCodexMeta(file);
           sessions.push({
             agent: 'codex',
             key: `codex:${entry.name.replace(/\.jsonl$/, '')}`,
             file,
             projectDirKey: null,
-            cwd: await readCodexCwd(file),
+            cwd: meta.cwd,
+            hosted: meta.hosted,
             startedAt: Math.round(st.birthtimeMs || st.ctimeMs),
             lastActivityAt: Math.round(st.mtimeMs),
           });

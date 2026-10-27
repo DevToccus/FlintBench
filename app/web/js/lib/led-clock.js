@@ -2,10 +2,10 @@ import { h, icon, replace } from './dom.js';
 import { timer, formatDuration } from './timer.js';
 
 /**
- * A digital LED clock: seven-segment digits (unlit segments stay faintly visible, like a real
- * display), the week as a column with today lit, and the full date underneath. It also holds a
- * countdown timer: the digits keep the time, the countdown runs small in the bottom-left corner,
- * and an alarm rings at zero.
+ * A digital LED clock for the top bar: seven-segment digits (unlit segments stay faintly visible,
+ * like a real display) with the day and date beside them. The whole readout is a button: it opens
+ * a panel with the full date, the week with today lit and a countdown timer. While the timer runs
+ * its countdown takes the date's place, and an alarm rings at zero.
  */
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -52,8 +52,9 @@ const PRESETS = [1, 3, 5, 10, 15, 25, 30, 45, 60];
 const TIME_UP = 'Time\u2019s up';
 
 /** The timer panel: presets and h/m/s when idle; pause, +1 min and cancel while it runs. */
-function timerPanel(close) {
-  const el = h('div.timer-pop', { role: 'dialog', 'aria-label': 'Timer', hidden: true });
+function timerPanel(close, head) {
+  const body = h('div.timer-body');
+  const el = h('div.timer-pop', { role: 'dialog', 'aria-label': 'Date and timer', hidden: true }, head, body);
   const num = (label, max, value) => h('input.input.mono.timer-num', { type: 'number', min: 0, max, value, inputMode: 'numeric', 'aria-label': label });
   const hh = num('Hours', 23, 0);
   const mm = num('Minutes', 59, 5);
@@ -66,10 +67,10 @@ function timerPanel(close) {
   function render() {
     const st = timer.status();
     if (st === 'ringing') {
-      replace(el, h('div.timer-title', icon('timer', 14), TIME_UP),
+      replace(body, h('div.timer-title', icon('timer', 14), TIME_UP),
         h('button.btn.primary.timer-wide', { type: 'button', onclick: () => { timer.stop(); close(); } }, 'Stop alarm'));
     } else if (st === 'idle') {
-      replace(el,
+      replace(body,
         h('div.timer-title', icon('timer', 14), 'Timer'),
         h('div.timer-presets', PRESETS.map((m) => h('button.btn.sm', { type: 'button', onclick: () => start(m * 60_000) }, m === 60 ? '1 h' : `${m} min`))),
         h('div.timer-custom',
@@ -79,7 +80,7 @@ function timerPanel(close) {
     } else {
       const paused = st === 'paused';
       const ends = new Date(timer.endsAt() ?? Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      replace(el,
+      replace(body,
         h('div.timer-title', icon('timer', 14), paused ? 'Timer · paused' : `Timer · ends ${ends}`),
         left, h('span.timer-bar', bar),
         h('div.timer-actions',
@@ -100,31 +101,36 @@ function timerPanel(close) {
 export function ledClock() {
   const big = [digit('big'), digit('big'), digit('big'), digit('big')];
   const small = [digit('small'), digit('small')];
-  const colon = h('span.led-colon', { 'aria-hidden': 'true' }, h('i'), h('i'));
-  const days = DAYS.map((d) => h('span.led-day', d));
-  const date = h('div.led-date');
-  const face = h('div.led-face', { 'aria-hidden': 'true' },
-    h('div.led-days', days),
-    h('div.led-time', big[0].el, big[1].el, colon, big[2].el, big[3].el, h('span.led-sec', small[0].el, small[1].el)));
+  const colon = h('span.led-colon', h('i'), h('i'));
+  const weekday = h('span.led-wday');
+  const monthday = h('span.led-mday');
   const timerText = h('span.led-timer-text');
-  const timerBtn = h('button.led-timer-btn', { type: 'button', title: 'Timer', 'aria-label': 'Timer', 'aria-expanded': 'false' }, icon('timer', 13), timerText);
-  const panel = timerPanel(() => setOpen(false));
-  const el = h('aside.led-clock', { role: 'timer', 'aria-label': 'Current time' }, face, h('div.led-foot', timerBtn, date), panel.el);
+  const face = h('span.led-face', { 'aria-hidden': 'true' },
+    h('span.led-time', big[0].el, big[1].el, colon, big[2].el, big[3].el, h('span.led-sec', small[0].el, small[1].el)),
+    h('span.led-meta', weekday, monthday),
+    h('span.led-timer', icon('timer', 12), timerText));
+  const trigger = h('button.led-trigger', { type: 'button', title: 'Date and timer', 'aria-haspopup': 'dialog', 'aria-expanded': 'false' }, face);
+  // the panel opens on the full date and the week, today lit, above the timer
+  const days = DAYS.map((d) => h('span.led-day', d));
+  const date = h('span.timer-date-text');
+  const head = h('div.timer-date', date, h('div.led-week', { 'aria-hidden': 'true' }, days));
+  const panel = timerPanel(() => setOpen(false), head);
+  const el = h('div.led-clock', trigger, panel.el);
 
   function setOpen(open) {
     panel.el.hidden = !open;
-    timerBtn.setAttribute('aria-expanded', String(open));
+    trigger.setAttribute('aria-expanded', String(open));
     if (open) {
       panel.render();
-      panel.el.querySelector('button, input')?.focus();
+      panel.el.querySelector('.timer-body button, .timer-body input')?.focus();
     }
   }
-  timerBtn.addEventListener('click', () => {
+  trigger.addEventListener('click', () => {
     if (timer.status() === 'ringing') { timer.stop(); setOpen(false); return; }
     setOpen(panel.el.hidden);
   });
   document.addEventListener('pointerdown', (e) => { if (!panel.el.hidden && !el.contains(e.target)) setOpen(false); });
-  el.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.el.hidden) { e.stopPropagation(); setOpen(false); timerBtn.focus(); } });
+  el.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.el.hidden) { e.stopPropagation(); setOpen(false); trigger.focus(); } });
 
   let lastStatus = timer.status();
   timer.on(() => {
@@ -141,7 +147,7 @@ export function ledClock() {
   function update(d = new Date()) {
     const st = timer.status();
     const counting = st === 'running' || st === 'paused';
-    el.classList.toggle('is-timer', counting);
+    el.classList.toggle('is-timer', counting || st === 'ringing');
     el.classList.toggle('is-paused', st === 'paused');
     el.classList.toggle('is-ringing', st === 'ringing');
     timerText.textContent = st === 'ringing' ? `${TIME_UP} · stop` : counting ? `${formatDuration(timer.remaining())}${st === 'paused' ? ' · paused' : ''}` : '';
@@ -153,9 +159,12 @@ export function ledClock() {
     small[0].set(Math.floor(ss / 10)); small[1].set(ss % 10);
     const today = (d.getDay() + 6) % 7;
     days.forEach((x, i) => x.classList.toggle('on', i === today));
+    weekday.textContent = DAYS[today];
+    monthday.textContent = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     date.textContent = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    el.setAttribute('aria-label', `${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}, ${date.textContent}${counting ? `. Timer: ${formatDuration(timer.remaining())} left` : ''}`);
+    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    trigger.setAttribute('aria-label', `${time}, ${date.textContent}. ${st === 'ringing' ? 'Timer finished: stop the alarm' : counting ? `Timer: ${formatDuration(timer.remaining())} left` : 'Open the timer'}`);
   }
   update();
-  return { el, update };
+  return { el, update, open: () => { setOpen(true); } };
 }

@@ -4,7 +4,7 @@ import { Router, sessionCookie, clearCookie } from './server.js';
 import { httpError } from '../host/paths.js';
 import { defaultSettings } from '../settings/defaults.js';
 import { pick } from '../host/picker.js';
-import { UI_SCALES } from '../settings/service.js';
+import { isUiScale } from '../../web/js/lib/appearance.js';
 import { resolveProfile } from '../../web/js/lib/profiles.js';
 import { editorCommands } from '../../web/js/lib/editors.js';
 
@@ -29,7 +29,7 @@ export function createRoutes(app) {
   const appearance = () => {
     const s = settings.get();
     const { style } = resolveProfile(s);
-    return { theme: s.theme, accent: style.accent, background: style.background, density: style.density, profile: s.profile, uiScale: UI_SCALES.includes(s.uiScale) ? s.uiScale : 1 };
+    return { theme: s.theme, accent: style.accent, background: style.background, density: style.density, profile: s.profile, uiScale: isUiScale(s.uiScale) ? s.uiScale : 1 };
   };
   r.get('/api/auth/state', ({ token }) => ({ ...auth.state(token), appearance: appearance() }), 'public');
   r.post('/api/auth/setup', async ({ body, userAgent, setCookie }) => {

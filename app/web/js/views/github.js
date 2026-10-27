@@ -453,7 +453,7 @@ export function mount(container) {
     }
     watchSetup(!status.installed || !status.authenticated);
     if (!status.installed || !status.authenticated) {
-      replace(headSub, 'Your repositories on GitHub, managed from here.');
+      replace(headSub);
       replace(headActions);
       const installed = status.installed;
       replace(content, h('div.empty-state.gh-setup',

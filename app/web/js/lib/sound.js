@@ -9,11 +9,10 @@ let master = null;
 
 export const soundEnabled = () => prefs.get('sound.enabled', true);
 export const voiceEnabled = () => prefs.get('voice.enabled', true);
-export const VOICE_VOLUMES = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
-/** Loudness of the recorded voice (0.1–1), remembered only in this browser. */
+/** Loudness of the recorded voice (0–1, in hundredths), remembered only in this browser. */
 export const voiceVolume = () => {
   const v = Number(prefs.get('voice.volume', 1));
-  return VOICE_VOLUMES.includes(v) ? v : 1;
+  return v >= 0 && v <= 1 ? v : 1;
 };
 
 function audio(force = false) {

@@ -1,7 +1,5 @@
 import { h, icon } from '../lib/dom.js';
-import { FEATURES, PRESETS, DENSITIES, START_TABS, AGENT_FEATURES, customDefaults } from '../lib/profiles.js';
-import { PATTERNS, DEFAULT_ACCENT } from '../lib/theme.js';
-import { accentPicker } from './settings.js';
+import { FEATURES, PRESETS, START_TABS, AGENT_FEATURES, customDefaults } from '../lib/profiles.js';
 
 const ORDER = ['essentials', 'builder', 'pro', 'pilot'];
 
@@ -17,15 +15,10 @@ function highlights(flags) {
   return parts.join(' · ');
 }
 
-/** A small picture of a profile's style: its accent on its background, at its density. */
-function swatch(style) {
-  return h(`span.pf-swatch.is-${style.background || 'hive'}`, { 'aria-hidden': 'true' },
-    h('i', { style: { background: style.accent || DEFAULT_ACCENT } }), h('i'), h('i'));
-}
-
 /**
- * The profiles as cards to choose from (radio semantics): the ready-made ones, then Custom.
- * `recommended` gets a badge; Labs is offered only when `labs` is true.
+ * The profiles as cards to choose from (radio semantics): the ready-made ones, then Custom. Each
+ * is told by its icon (colours are yours to choose in Appearance, so they no longer tell them
+ * apart). `recommended` gets a badge; Labs is offered only when `labs` is true.
  */
 export function profileCards({ value, recommended = null, labs = false, onPick }) {
   const ids = [...ORDER, 'custom', ...(labs ? ['test'] : [])];
@@ -35,19 +28,28 @@ export function profileCards({ value, recommended = null, labs = false, onPick }
     const input = h('input.pf-radio', { type: 'radio', name, value: id, checked: id === value, onchange: () => onPick(id) });
     return h(`label.pf-card${id === value ? '.is-on' : ''}`, { dataset: { id } },
       input,
-      p ? swatch(p.style) : h('span.pf-swatch.is-custom', { 'aria-hidden': 'true' }, icon('settings', 16)),
+      h('span.pf-icon', { 'aria-hidden': 'true' }, icon(p?.icon ?? 'settings', 22)),
       h('span.pf-text',
         h('span.pf-name', p?.name ?? 'Custom', id === recommended ? h('span.chip.accent', 'Recommended') : null),
-        h('span.pf-tag', p?.tagline ?? 'You choose'),
-        h('span.pf-desc', p?.description ?? 'Every section, tab and block on or off, and your own accent, background and density.'),
+        h('span.pf-tag', p?.tagline ?? 'Your own mix'),
+        h('span.pf-desc', p?.description ?? 'Every section, tab and block on or off, with the accent and density you choose in Appearance. Changing anything in a profile makes it Custom.'),
         p ? h('span.pf-meta', highlights(p.flags)) : null));
   }));
 }
 
+/** Shows `id` as the chosen card without drawing the cards again (focus stays where it is). */
+export function markProfile(cards, id) {
+  for (const c of cards?.querySelectorAll('.pf-card') ?? []) {
+    c.classList.toggle('is-on', c.dataset.id === id);
+    c.querySelector('.pf-radio').checked = c.dataset.id === id;
+  }
+}
+
 /**
- * Custom profile: every feature on or off (grouped as in the console), the style (accent,
- * background, density) and the tab a project opens on. `onChange` gets the whole profile each time.
- * Agent features are marked when you said you do not use agents (they stay hidden then).
+ * What a profile shows: every feature on or off (grouped as in the console) and the tab a project
+ * opens on. `onChange` gets the whole profile each time. Agent features are marked when you said
+ * you do not use agents (they stay hidden then). The style (accent, background, density) is
+ * carried along unchanged: it is chosen in Settings › Appearance.
  */
 export function customEditor(initial, onChange, { agentsInUse = true } = {}) {
   const c = structuredClone(initial ?? customDefaults());
@@ -69,9 +71,6 @@ export function customEditor(initial, onChange, { agentsInUse = true } = {}) {
   };
   return h('div.pf-editor',
     h('div.pf-groups', [...groups].map(([group, rows]) => h('fieldset.pf-group', h('legend', group), rows))),
-    h('fieldset.pf-group.pf-style', h('legend', 'Style'),
-      h('div.pf-choice', h('span.pf-choice-label', 'Accent colour'), accentPicker(c.style.accent, (v) => { c.style.accent = v; emit(); })),
-      choice('Background', PATTERNS, c.style.background || 'hive', (v) => { c.style.background = v; }),
-      choice('Density', DENSITIES, c.style.density || 'comfortable', (v) => { c.style.density = v; }),
+    h('fieldset.pf-group.pf-style', h('legend', 'Projects'),
       choice('A project opens on', START_TABS, c.startTab || 'overview', (v) => { c.startTab = v; })));
 }

@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import { httpError } from '../host/paths.js';
 import { defaultSettings } from './defaults.js';
 import { PROFILE_IDS, FEATURE_KEYS, DENSITIES, START_TABS, customDefaults } from '../../web/js/lib/profiles.js';
+import { PALETTE_IDS, SCENE_IDS, BLUR_RANGE, TRANSPARENCY_RANGE, inRange, isUiScale } from '../../web/js/lib/appearance.js';
 
 export const BACKGROUNDS = ['hive', 'dots', 'grid', 'lines', 'none'];
 export const PROFILES = PROFILE_IDS;
@@ -32,7 +33,6 @@ function migrate(s) {
   if (!PROFILE_IDS.includes(s.profile)) s.profile = 'builder';
   return s;
 }
-export const UI_SCALES = [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4];
 
 /** Settings domain: validation + change notification over the SettingsStore. */
 export class SettingsService extends EventEmitter {
@@ -46,9 +46,9 @@ export class SettingsService extends EventEmitter {
     const stored = migrate(structuredClone(this.store.get()));
     const d = defaultSettings();
     // options added after these settings were saved take their default (stored ones win)
-    const s = { ...d, ...stored, agents: { ...d.agents, ...stored.agents }, editor: { ...d.editor, ...stored.editor }, notifications: { ...d.notifications, ...stored.notifications } };
+    const s = { ...d, ...stored, agents: { ...d.agents, ...stored.agents }, editor: { ...d.editor, ...stored.editor }, notifications: { ...d.notifications, ...stored.notifications }, appearance: { ...d.appearance, ...stored.appearance } };
     // values saved by older versions are read in today's terms: the former 115% is now 100%
-    return UI_SCALES.includes(s.uiScale) ? s : { ...s, uiScale: 1 };
+    return isUiScale(s.uiScale) ? s : { ...s, uiScale: 1 };
   }
 
   async update(patch) {
@@ -56,7 +56,7 @@ export class SettingsService extends EventEmitter {
       migrate(s);
       if ('scanDepth' in patch) {
         const d = Number(patch.scanDepth);
-        if (!Number.isInteger(d) || d < 1 || d > 6) throw httpError(400, 'Scan depth must be 1–6');
+        if (!inRange(d, [1, 8])) throw httpError(400, 'Scan depth must be 1–8');
         s.scanDepth = d;
       }
       if ('autoAddGitRepos' in patch) s.autoAddGitRepos = Boolean(patch.autoAddGitRepos);
@@ -80,8 +80,30 @@ export class SettingsService extends EventEmitter {
       }
       if ('uiScale' in patch) {
         const v = Number(patch.uiScale);
-        if (!UI_SCALES.includes(v)) throw httpError(400, 'Unknown UI scale');
+        if (!isUiScale(v)) throw httpError(400, 'Text size must be 75–150%');
         s.uiScale = v;
+      }
+      if (patch.appearance) {
+        const a = patch.appearance;
+        const next = { ...defaultSettings().appearance, ...s.appearance };
+        if ('palette' in a) {
+          if (!PALETTE_IDS.includes(a.palette)) throw httpError(400, 'Unknown colour theme');
+          next.palette = a.palette;
+        }
+        if ('scene' in a) {
+          if (!SCENE_IDS.includes(a.scene)) throw httpError(400, 'Unknown background');
+          next.scene = a.scene;
+        }
+        if ('sceneMotion' in a) next.sceneMotion = Boolean(a.sceneMotion);
+        if ('sceneBlur' in a) {
+          if (!inRange(a.sceneBlur, BLUR_RANGE)) throw httpError(400, `Background blur must be ${BLUR_RANGE.join('–')} px`);
+          next.sceneBlur = a.sceneBlur;
+        }
+        if ('transparency' in a) {
+          if (!inRange(a.transparency, TRANSPARENCY_RANGE)) throw httpError(400, `Transparency must be ${TRANSPARENCY_RANGE.join('–')}%`);
+          next.transparency = a.transparency;
+        }
+        s.appearance = next;
       }
       if ('profile' in patch) {
         if (!PROFILES.includes(patch.profile)) throw httpError(400, 'Unknown profile');

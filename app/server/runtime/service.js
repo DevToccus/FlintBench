@@ -21,10 +21,14 @@ const EDITOR_WINDOWS = {
 const ANSI = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07/g;
 const URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):(\d{2,5})/;
 const DEV_RUNTIMES = /^(node|nodemon|bun|deno|python\d*|py|pythonw|uvicorn|gunicorn|flask|go|cargo|java|dotnet|php|ruby|rails|air)(\.exe)?$/i;
+// the Claude desktop app's own Electron processes share the CLI's name; the Claude Code it runs for
+// a session is a separate claude.exe from its data folder, and is kept
+const CLAUDE_DESKTOP_SHELL = /[\\/](WindowsApps[\\/]Claude_[^\\/]*[\\/]app|AnthropicClaude[\\/]app-[^\\/]*|Claude\.app[\\/]Contents[\\/]MacOS)[\\/]claude(\.exe)?\b/i;
 const AGENT_PATTERNS = [
   // --chrome-native-host is the browser-extension bridge, not a coding session
-  { agent: 'claude', test: (p) => (/^claude(\.exe)?$/i.test(p.name) || /@anthropic-ai[\\/]claude-code/i.test(p.cmd)) && !/--chrome-native-host\b/i.test(p.cmd) },
-  { agent: 'codex', test: (p) => /^codex(\.exe)?$/i.test(p.name) || /@openai[\\/]codex/i.test(p.cmd) },
+  { agent: 'claude', test: (p) => (/^claude(\.exe)?$/i.test(p.name) || /@anthropic-ai[\\/]claude-code/i.test(p.cmd)) && !/--chrome-native-host\b/i.test(p.cmd) && !CLAUDE_DESKTOP_SHELL.test(p.cmd) },
+  // `codex app-server` (desktop app, IDE extension) hosts every thread of the app, in no project folder
+  { agent: 'codex', test: (p) => /^codex(\.exe)?$/i.test(p.name) || /@openai[\\/]codex/i.test(p.cmd), host: (p) => /\s(app-server|exec-server)\b/.test(p.cmd) },
   { agent: 'antigravity', test: (p) => /^agy(\.exe)?$/i.test(p.name) },
 ];
 
@@ -536,7 +540,7 @@ export class RuntimeService {
       this.agentProcesses = [];
       for (const p of processes) {
         const match = AGENT_PATTERNS.find((a) => a.test(p));
-        if (match) this.agentProcesses.push({ agent: match.agent, pid: p.pid, startedAt: p.startedAt ?? null, managed: managed.has(p.pid), cmd: p.cmd.slice(0, 300) });
+        if (match) this.agentProcesses.push({ agent: match.agent, pid: p.pid, startedAt: p.startedAt ?? null, managed: managed.has(p.pid), host: Boolean(match.host?.(p)), cmd: p.cmd.slice(0, 300) });
       }
       // drop child processes of the same agent (node -> claude.exe etc.)
       const agentPids = new Set(this.agentProcesses.map((a) => a.pid));

@@ -122,6 +122,7 @@ export class ProjectService extends EventEmitter {
 
   async #activate(project) {
     const exists = await this.host.paths.isDirectory(project.path);
+    const detected = exists ? await detectProject(project.path).catch(() => null) : null;
     const data = await this.storage.project(project.id);
     const lastEvents = await data.activity.read({ limit: 50 });
     const lastActivityAt = lastEvents
@@ -131,6 +132,7 @@ export class ProjectService extends EventEmitter {
     const lastOpened = [...lastEvents].reverse().find((e) => e.type === 'project.opened')?.at ?? null;
     const state = {
       ...project,
+      description: detected?.description ?? project.description ?? '',
       exists,
       running: false,
       status: exists ? 'stopped' : 'missing',
@@ -191,6 +193,7 @@ export class ProjectService extends EventEmitter {
       path: dir,
       pathKey: key,
       stack: detected.stack,
+      description: detected.description ?? '',
       composeFiles: detected.composeFiles,
       source,
       addedAt: Date.now(),
@@ -229,7 +232,7 @@ export class ProjectService extends EventEmitter {
     const s = this.get(id);
     const detected = await detectProject(s.path);
     if (!detected) return;
-    const patch = { stack: detected.stack, composeFiles: detected.composeFiles };
+    const patch = { stack: detected.stack, composeFiles: detected.composeFiles, description: detected.description ?? '' };
     await this.storage.projects.update(id, patch);
     Object.assign(s, patch);
     s.docker.composeFiles = detected.composeFiles;

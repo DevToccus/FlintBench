@@ -48,7 +48,7 @@ async function showLock() {
 function wearAppearance(state) {
   const a = state?.appearance;
   if (!a) return;
-  applyTheme(a.theme, a.accent ?? '', a.background ?? 'hive', a.profile ?? 'builder', a.uiScale ?? 1);
+  applyTheme(a.theme, a.accent ?? '', a.background ?? 'none', a.profile ?? 'builder', a.uiScale ?? 1);
   applyDensity(a.density);
 }
 

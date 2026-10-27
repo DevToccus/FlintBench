@@ -53,6 +53,7 @@ document.addEventListener('click', (event) => {
   const a = event.target.closest('a[href]');
   if (!a || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || a.target) return;
   const url = new URL(a.href, location.href);
+  if (url.hash && url.pathname === location.pathname) return;
   if (url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
   event.preventDefault();
   navigate(url.pathname);

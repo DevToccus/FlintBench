@@ -181,7 +181,7 @@ export function mount(container) {
       onclick: () => { if (y === yearNo) return; yearNo = y; prefs.set('activity.year', y); loadCalendar(); render(); },
     }, String(y))));
     const head = h('header.page-head',
-      h('div', h('h1', 'Activity'), h('p.sub', 'Computed on demand from git history, the agent journal and FlintBench activity logs on this machine.')));
+      h('div', h('h1', 'Activity')));
     const calendarPart = cal && calYear === yearNo ? calendar(cal, yearNo, yearTabs)
       : h('section.cal-panel', h('header.cal-head', h('strong', `Reading ${yearNo}…`), h('span.spacer'), yearTabs));
     const periodBar = h('div.section-title.range-bar', h('span.label', `Activity in ${periodText(range)}`), h('span.spacer'), rangeForm);

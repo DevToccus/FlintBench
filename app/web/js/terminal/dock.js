@@ -302,7 +302,7 @@ export function createDock(projectId) {
   const tabs = h('div.dock-tabs', { role: 'tablist', 'aria-label': 'Terminals' });
   const body = h('div.dock-body');
   const toggleBtn = h('button.btn.sm.icon.ghost', { type: 'button', title: 'Toggle terminal (Ctrl+`)', onclick: () => toggle() });
-  const maxBtn = h('button.btn.sm.icon.ghost', { type: 'button', title: 'Maximize terminal', onclick: () => { maximized = !maximized; layout(); fitActive(); } }, icon('maximize', 13));
+  const maxBtn = h('button.btn.sm.icon.ghost', { type: 'button', title: 'Maximize terminal', onclick: () => setMaximized(!maximized) }, icon('maximize', 13));
   const resizer = h('div.dock-resizer', { role: 'separator', 'aria-orientation': 'horizontal', 'aria-label': 'Resize terminal', tabindex: 0 });
   const el = h('section.dock', { 'aria-label': 'Terminal' },
     resizer,
@@ -367,6 +367,69 @@ export function createDock(projectId) {
     el.style.setProperty('--dock-h', `${height}px`);
     replace(toggleBtn, icon(collapsed ? 'up' : 'down', 14));
     toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+    replace(maxBtn, icon(maximized && !collapsed ? 'minimize' : 'maximize', 13));
+    maxBtn.title = maximized && !collapsed ? 'Restore terminal size' : 'Maximize terminal';
+  }
+
+  /* Opening, closing, maximising and restoring move only the top edge of the dock (its foot stays
+     on the status bar): opening and closing animate its height, so the page above makes room as
+     it goes; maximising slides the full-size dock up from where its top was, clipped at the foot.
+     The terminal is fitted once, when the move ends. */
+  const BAR_H = 32; // the collapsed dock: its bar only (.dock.collapsed)
+  const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+  let motion = null;
+  const still = () => !el.isConnected || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const drawnHeight = () => parseFloat(getComputedStyle(el).height) || 0;
+
+  function run(keyframes, duration, done) {
+    motion?.cancel();
+    el.classList.add('is-moving');
+    const a = el.animate(keyframes, { duration, easing: EASE, fill: 'forwards' });
+    motion = a;
+    a.finished.then(() => {
+      motion = null;
+      done?.();
+      a.cancel();
+      el.classList.remove('is-moving');
+      fitActive();
+    }, () => {
+      if (motion !== a) return; // replaced by the next move
+      motion = null;
+      el.classList.remove('is-moving');
+    });
+  }
+
+  function setCollapsed(next) {
+    if (next === collapsed) return;
+    const from = el.isConnected ? drawnHeight() : 0;
+    const animate = from > 0 && !maximized && !still();
+    collapsed = next;
+    prefs.set('dock.collapsed', collapsed);
+    if (collapsed && animate) { run([{ height: `${from}px` }, { height: `${BAR_H}px` }], 200, layout); return; }
+    motion?.cancel();
+    layout();
+    if (!collapsed && animate) run([{ height: `${from}px` }, { height: `${height}px` }], 280);
+  }
+
+  function setMaximized(next) {
+    if (next === maximized) return;
+    const docked = collapsed ? BAR_H : height;
+    // the full-size dock, its top lowered to where the docked one starts and its foot clipped
+    const lowered = (d) => ({ transform: `translateY(${d}px)`, clipPath: `inset(0 0 ${d}px 0)` });
+    const raised = { transform: 'translateY(0)', clipPath: 'inset(0 0 0 0)' };
+    if (next) {
+      motion?.cancel();
+      maximized = true;
+      layout();
+      const d = drawnHeight() - docked;
+      if (d > 0 && !collapsed && !still()) run([lowered(d), raised], 300);
+      else fitActive();
+      return;
+    }
+    const done = () => { maximized = false; layout(); };
+    const d = drawnHeight() - docked;
+    if (d > 0 && !collapsed && !still()) run([raised, lowered(d)], 240, done);
+    else { motion?.cancel(); done(); fitActive(); }
   }
 
   let tabsKey = '';
@@ -392,7 +455,7 @@ export function createDock(projectId) {
       contextMenu(tab, () => [
         { label: 'Show', icon: 'chevron', run: () => show(t.id) },
         conversation ? null : { label: 'Rename', icon: 'editor', run: () => rename(t) },
-        { label: maximized ? 'Restore size' : 'Maximize', icon: 'maximize', run: () => { show(t.id, { focus: false }); maximized = !maximized; layout(); fitActive(); } },
+        { label: maximized ? 'Restore size' : 'Maximize', icon: 'maximize', run: () => { show(t.id, { focus: false }); setMaximized(!maximized); } },
         movableIn(t) ? { label: movableIn(t).moving === 'out' ? 'Cancel transfer' : 'Transfer to terminal', icon: 'external', run: () => moveToTerminal(t.id, movableIn(t)) } : null,
         '-',
         { label: conversation ? 'Close conversation' : t.exited ? 'Remove' : 'Close', icon: 'x', danger: !conversation && !t.exited, run: () => (conversation ? closeTranscript(t) : closeTerminal(t)) },
@@ -445,11 +508,7 @@ export function createDock(projectId) {
 
   function show(id, { focus = true } = {}) {
     selectedByProject.set(projectId, id);
-    if (collapsed) {
-      collapsed = false;
-      prefs.set('dock.collapsed', false);
-      layout();
-    }
+    if (collapsed) setCollapsed(false);
     renderTabs();
     renderBody();
     if (focus) requestAnimationFrame(() => instances.get(id)?.term.focus());
@@ -526,9 +585,7 @@ export function createDock(projectId) {
   }
 
   function toggle(force) {
-    collapsed = typeof force === 'boolean' ? !force : !collapsed;
-    prefs.set('dock.collapsed', collapsed);
-    layout();
+    setCollapsed(typeof force === 'boolean' ? !force : !collapsed);
     if (!collapsed) {
       renderBody();
       const t = selected();
@@ -539,6 +596,7 @@ export function createDock(projectId) {
   // drag to resize
   resizer.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    motion?.cancel();
     resizer.setPointerCapture(e.pointerId);
     resizer.classList.add('dragging');
     const startY = e.clientY;
@@ -567,7 +625,7 @@ export function createDock(projectId) {
     fitActive();
   });
 
-  const ro = new ResizeObserver(() => fitActive());
+  const ro = new ResizeObserver(() => { if (!motion) fitActive(); });
   ro.observe(body);
   let known = new Set(list().map((t) => t.id));
   const unsub = subscribe('terminals', () => {

@@ -390,8 +390,9 @@ export class AgentService {
 
   /** True when the session belongs to an agent FlintBench launched (it already has its own terminal tab). */
   #overlapsManaged(file, projectId) {
-    // a running process is attributed exactly by #terminalOf; the time window is for session files only
-    if (file.pid) return false;
+    // a running process is attributed exactly by #terminalOf; the time window is for session files
+    // only, and a desktop app's thread is never one FlintBench launched
+    if (file.pid || file.hosted) return false;
     const candidates = [...this.persisted.values(), ...[...this.sessions.values()].map((s) => this.#record(s))];
     return candidates.some((r) => r.source === 'flintbench' && r.agent === file.agent && r.projectId === projectId
       && file.startedAt >= r.startedAt - 60_000 && file.startedAt <= (r.endedAt ?? Date.now()) + 60_000);
@@ -452,8 +453,10 @@ export class AgentService {
       await this.#detectTurns(claude.running, files).catch((e) => this.log.warn(`[agents] turns: ${e.message}`));
       // Same rule for every agent: an open process is a live session from its first second, in the
       // project of its working directory (Claude Code is covered above by its own registry).
+      // A host app (Codex desktop, its IDE extension) is one process for all its threads: its
+      // sessions are told apart by their own files, below.
       for (const p of this.processes) {
-        if (!p.cwd || (p.agent === 'claude' && claude.available)) continue;
+        if (!p.cwd || p.host || (p.agent === 'claude' && claude.available)) continue;
         const key = `${p.agent}:proc:${p.pid}:${p.startedAt ?? 0}`;
         // a process being open is not activity: its session files say when it last did something
         entries.set(key, { agent: p.agent, key, pid: p.pid, cwd: p.cwd, startedAt: p.startedAt ?? now, lastActivityAt: p.startedAt ?? now, fromProcess: true });
@@ -471,7 +474,7 @@ export class AgentService {
       // a session file written by such a process (first message sent) is the same session, not a second one
       for (const proc of [...entries.values()].filter((e) => e.fromProcess)) {
         for (const f of [...entries.values()]) {
-          if (f.fromProcess || f.pid || f.agent !== proc.agent || !f.cwd) continue;
+          if (f.fromProcess || f.pid || f.hosted || f.agent !== proc.agent || !f.cwd) continue;
           if (this.host.paths.pathKey(f.cwd) !== this.host.paths.pathKey(proc.cwd) || f.startedAt < proc.startedAt - 10_000) continue;
           entries.delete(f.key);
           this.absorbedKeys.add(f.key);
@@ -483,7 +486,10 @@ export class AgentService {
       const seen = new Set();
       // every Codex process is known with its folder: the process list alone says which are open
       const codexSeen = Boolean(this.host.processes?.cwdSupported) && this.runtime.snapshot.at > 0
-        && this.processes.filter((p) => p.agent === 'codex').every((p) => p.cwd);
+        && this.processes.filter((p) => p.agent === 'codex' && !p.host).every((p) => p.cwd);
+      // a thread of the Codex desktop app can be open only while the app runs (before the first
+      // process snapshot this is not known yet: its file alone decides)
+      const codexHostOpen = !(this.runtime.snapshot.at > 0) || this.processes.some((p) => p.agent === 'codex' && p.host);
       const agentInTerminal = new Map();
       const deferred = new Set(); // running, but waiting for a process snapshot to be attributed
       for (const f of entries.values()) {
@@ -491,8 +497,12 @@ export class AgentService {
         // with the registry, a Claude Code session is live exactly while its process runs; Codex
         // likewise while its processes are seen with their folders (a running one absorbs its file);
         // otherwise (older versions, no process data) a recently written session file counts as live
-        const byProcess = (f.agent === 'claude' && claude.available) || (f.agent === 'codex' && codexSeen);
-        const active = Boolean(f.pid) || (now - f.lastActivityAt < ACTIVE_WINDOW && !byProcess);
+        // A thread of a host app (Codex desktop) has no process of its own: open while the app runs
+        // and the thread was written recently, or is answering right now.
+        const byProcess = (f.agent === 'claude' && claude.available) || (f.agent === 'codex' && codexSeen && !f.hosted);
+        const active = Boolean(f.pid)
+          || (f.hosted ? codexHostOpen && (now - f.lastActivityAt < ACTIVE_WINDOW || this.codexBusy.get(f.key) === true)
+            : now - f.lastActivityAt < ACTIVE_WINDOW && !byProcess);
         const projectId = this.#matchProject(f);
         if (!projectId) {
           if (active) unattributed.push({ agent: f.agent, lastActivityAt: f.lastActivityAt, cwd: f.cwd });

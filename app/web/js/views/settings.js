@@ -1,17 +1,19 @@
 import { h, icon, replace, actionButton } from '../lib/dom.js';
 import { store, subscribe, prefs } from '../lib/store.js';
-import { play, playGreeting, VOICE_VOLUMES } from '../lib/sound.js';
+import { play, playGreeting } from '../lib/sound.js';
 import { api } from '../lib/api.js';
 import { attempt, toast, confirmDialog } from '../lib/ui.js';
 import { ago } from '../lib/format.js';
 import { showSampleNotifications } from '../lib/notify.js';
-import { applyAccent, isHex, hslHex, hueOf, DEFAULT_ACCENT } from '../lib/theme.js';
+import { applyAccent, isHex, hslHex, hueOf, DEFAULT_ACCENT, PATTERNS } from '../lib/theme.js';
 import { setLeaveGuard } from '../lib/router.js';
 import { browseButton } from '../lib/picker.js';
 import { applySettingsLook } from '../lib/theme.js';
-import { PRESETS, customDefaults, usesAgents } from '../lib/profiles.js';
+import { PRESETS, DENSITIES, customDefaults, resolveProfile, usesAgents } from '../lib/profiles.js';
 import { EDITORS, editorName } from '../lib/editors.js';
-import { profileCards, customEditor } from './profile-editor.js';
+import { profileCards, customEditor, markProfile } from './profile-editor.js';
+import { PALETTES, SCENES, BLUR_RANGE, TRANSPARENCY_RANGE, UI_SCALE_RANGE } from '../lib/appearance.js';
+import { sceneThumbnail } from '../lib/scene.js';
 
 // vivid presets: the whole interface and the clock take the chosen one
 const SWATCHES = [
@@ -157,7 +159,8 @@ function ignoredDrawer(ignored, open, onToggle) {
   return box;
 }
 
-const inField = (t) => Boolean(t?.closest?.('input, textarea, select, [contenteditable="true"], .xterm'));
+// a slider is not a field: Q / E still change tab and a re-render may take it
+const inField = (t) => Boolean(t?.closest?.('input:not([type="range"]), textarea, select, [contenteditable="true"], .xterm'));
 
 /** Off | On segmented switch. Click or Space toggles; ← / → pick a side. */
 function switchControl(label, on, onChange) {
@@ -204,6 +207,134 @@ function stepper(label, options, value, onChange) {
   });
   show();
   return root;
+}
+
+/**
+ * A number to drag on a slider or type in its field, with its unit and a word for special values
+ * (0 → Never). Dragging previews at once and is staged when the gesture ends; a typed number is
+ * staged as it is typed, within range, and settled on Enter or when the field is left (out of
+ * range it is brought back in). Esc in the field restores the value it had.
+ */
+function rangeField(label, { min, max, step = 1, unit = '', hint }, value, onChange) {
+  const slider = h('input.range-slider', { type: 'range', min, max, step, value, 'aria-label': label, dataset: { primary: '' } });
+  const field = h('input.input.range-number', { type: 'number', min, max, step, value, autocomplete: 'off', 'aria-label': unit ? `${label} (${unit})` : label });
+  const word = hint ? h('span.range-hint') : null;
+  const clamp = (v) => Math.min(max, Math.max(min, Math.round(v / step) * step));
+  const show = (v) => {
+    slider.value = v;
+    slider.style.setProperty('--fill', `${((v - min) / (max - min)) * 100}%`);
+    const said = hint?.(v) ?? '';
+    if (word) word.textContent = said;
+    slider.setAttribute('aria-valuetext', `${v}${unit ? ` ${unit}` : ''}${said ? `, ${said}` : ''}`);
+  };
+  // the look is previewed once per frame while dragging, however many input events arrive
+  let frame = 0;
+  slider.addEventListener('input', () => {
+    const v = Number(slider.value);
+    field.value = v;
+    show(v);
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => onChange(v, { typing: true }));
+  });
+  slider.addEventListener('change', () => { cancelAnimationFrame(frame); onChange(Number(slider.value)); });
+  field.addEventListener('input', () => {
+    const v = Number(field.value);
+    if (field.value === '' || v < min || v > max) return;
+    show(clamp(v));
+    onChange(clamp(v), { typing: true });
+  });
+  field.addEventListener('change', () => {
+    const v = field.value === '' ? Number(slider.value) : clamp(Number(field.value));
+    field.value = v;
+    show(v);
+    onChange(v, { typing: true, settle: true });
+  });
+  field.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    field.value = value;
+    show(value);
+    onChange(value, { typing: true, settle: true });
+  });
+  show(value);
+  return h('div.range', slider, h('span.range-box', field, unit ? h('span.range-unit', { 'aria-hidden': 'true' }, unit) : null), word);
+}
+
+/**
+ * A number set with − and + (or ← / → in its field), or typed: for sizes, where each press should
+ * be one visible step. The typed number is staged as it is typed and settled on Enter or when the
+ * field is left; Esc restores the value it had.
+ */
+function numberStepper(label, { min, max, step = 1, unit = '' }, value, onChange) {
+  let current = value;
+  const field = h('input.input.range-number', { type: 'number', min, max, step, value, autocomplete: 'off', 'aria-label': unit ? `${label} (${unit})` : label, dataset: { primary: '' } });
+  const less = h('button.btn.icon.num-btn', { type: 'button', tabIndex: -1, 'aria-label': `Smaller ${label.toLowerCase()}` }, icon('minus', 14));
+  const more = h('button.btn.icon.num-btn', { type: 'button', tabIndex: -1, 'aria-label': `Larger ${label.toLowerCase()}` }, icon('plus', 14));
+  const show = (v) => { current = v; field.value = v; less.disabled = v <= min; more.disabled = v >= max; };
+  // a press lands on the next multiple of the step (103 → 105 → 110)
+  const by = (d) => {
+    const next = Math.min(max, Math.max(min, d > 0 ? Math.floor(current / step) * step + step : Math.ceil(current / step) * step - step));
+    if (next === current) return;
+    show(next);
+    onChange(next, { typing: true, settle: true });
+  };
+  less.addEventListener('click', () => { by(-1); field.focus(); });
+  more.addEventListener('click', () => { by(1); field.focus(); });
+  field.addEventListener('input', () => {
+    const v = Math.round(Number(field.value));
+    if (field.value === '' || v < min || v > max) return;
+    current = v;
+    less.disabled = v <= min; more.disabled = v >= max;
+    onChange(v, { typing: true });
+  });
+  field.addEventListener('change', () => {
+    show(field.value === '' ? current : Math.min(max, Math.max(min, Math.round(Number(field.value)))));
+    onChange(current, { typing: true, settle: true });
+  });
+  field.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); by(e.key === 'ArrowRight' ? 1 : -1); }
+    if (e.key === 'Escape') { e.stopPropagation(); show(value); onChange(value, { typing: true, settle: true }); }
+  });
+  show(value);
+  return h('div.num-step', { role: 'group', 'aria-label': label }, less, h('span.range-box', field, unit ? h('span.range-unit', { 'aria-hidden': 'true' }, unit) : null), more);
+}
+
+const lockText = (m) => (m === 0 ? 'Never' : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`);
+const accentText = (v) => (v ? v.toUpperCase() : 'Copper (default)');
+
+/**
+ * A row of picture choices (colour themes, backgrounds): one stop for Tab, ← / → pick the
+ * neighbour, a click picks that one. Each option: { value, text, visual }.
+ */
+function choiceCards(label, options, value, onChange, cls = '') {
+  const cards = options.map((o) => h('button.look-choice', {
+    type: 'button', tabIndex: -1, 'aria-pressed': String(same(o.value, value)), dataset: { value: JSON.stringify(o.value) },
+    onclick: () => pick(o.value, true),
+  }, h('span.look-visual', { 'aria-hidden': 'true' }, o.visual), h('span.look-name', o.text)));
+  const root = h(`div.look-choices${cls}`, { tabIndex: 0, role: 'group', 'aria-label': label, dataset: { primary: '' } }, cards);
+  function pick(v, focus = false) {
+    if (same(v, value)) return;
+    value = v;
+    for (const c of cards) c.setAttribute('aria-pressed', String(c.dataset.value === JSON.stringify(v)));
+    if (focus) root.focus();
+    onChange(v);
+  }
+  root.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const i = options.findIndex((o) => same(o.value, value));
+    const next = options[i + (e.key === 'ArrowRight' ? 1 : -1)];
+    if (next) pick(next.value);
+  });
+  return root;
+}
+
+const paletteVisual = (bg, surface) => h('span.look-swatch', { style: { background: bg } },
+  h('span.look-swatch-card', { style: { background: surface } }), h('span.look-swatch-accent'));
+
+function sceneVisual(id) {
+  if (id === 'none') return h('span.look-scene.is-none');
+  return h('span.look-scene', sceneThumbnail(id));
 }
 
 /** Text value staged as it is typed; Esc restores the value it had. */
@@ -263,7 +394,7 @@ export function mount(container, _route, actions) {
   const empty = h('p.settings-empty', { hidden: true }, 'No setting matches.');
 
   inner.append(
-    h('header.page-head.settings-head', h('div', h('h1', 'Settings'), h('p.sub', 'Changes preview at once and are kept when you press Save. Stored in settings.json inside the FlintBench data folder.')), h('span.spacer'), search),
+    h('header.page-head.settings-head', h('div', h('h1', 'Settings')), h('span.spacer'), search),
     h('div.stabs', h('kbd.stabs-key', { 'aria-hidden': 'true', title: 'Previous tab' }, 'Q'), tabBar, h('kbd.stabs-key', { 'aria-hidden': 'true', title: 'Next tab' }, 'E')),
     h('div.settings-body',
       h('div.settings-main', panels, empty, foot),
@@ -312,16 +443,87 @@ export function mount(container, _route, actions) {
     };
   }
 
-  /** A stepped preference kept only in this browser (voice volume). */
-  function localStepper(pref, label, desc, options, fmt, extra = {}) {
+  /** A preference kept only in this browser, with its own control (voice volume). */
+  function localSetting(pref, label, desc, control, fmt, extra = {}) {
     const key = `local:${pref}`;
     const fallback = LOCAL[pref];
     const v = valueOf(key);
     return {
       key, label, desc, note: 'Remembered only in this browser.', ...extra,
-      control: stepper(label, options, v, (nv) => stage(key, nv)),
+      control: control(v, (nv, o) => stage(key, nv, o)),
       def: fmt(fallback), current: fmt(v), modified: !same(v, fallback), staged: draft.has(key),
       reset: { key, value: fallback },
+    };
+  }
+
+  /* ---------- the profile: ready-made, or made your own ---------- */
+
+  /** The profile in force, unsaved choices included: id, name, flags, style, start tab. */
+  const draftProfile = () => resolveProfile({ profile: valueOf('profile'), customProfile: valueOf('customProfile') });
+  /** The ready-made profile it comes from: itself, or the one Custom was made from. */
+  const baseOf = () => {
+    const id = valueOf('profile');
+    if (id !== 'custom') return id;
+    const base = valueOf('customProfile')?.base;
+    return PRESETS[base] ? base : 'builder';
+  };
+
+  /**
+   * Makes the profile yours: Custom, starting from everything the profile in force has, with
+   * `change` applied. When the change undoes the last difference it is the ready-made one again.
+   */
+  function customise(change, { revert = true, ...opts } = {}) {
+    const p = draftProfile();
+    const base = baseOf();
+    const c = { base, flags: { ...p.flags }, style: { ...p.style }, startTab: p.startTab };
+    change(c);
+    const preset = customDefaults(base);
+    const back = revert && same(c.flags, preset.flags) && same(c.style, preset.style) && c.startTab === preset.startTab;
+    stage('customProfile', back ? stored('customProfile') : c, { typing: true });
+    stage('profile', back ? base : 'custom', opts);
+  }
+
+  function pickProfile(id) {
+    // Custom picked by hand: the one you made before, or a copy of the profile in force
+    if (id === 'custom' && !valueOf('customProfile')) customise(() => {}, { revert: false });
+    else stage('profile', id);
+  }
+
+  /** Something the profile brings (accent, background, density): yours to change, which makes it Custom. */
+  function styleSetting(k, label, desc, control, { fmt = String, ...extra } = {}) {
+    const key = `style.${k}`;
+    const value = draftProfile().style[k];
+    const base = PRESETS[baseOf()];
+    const brought = base.style[k];
+    return {
+      key, label, desc, current: fmt(value), ...extra,
+      control: control(value, (v, o) => stage(key, v, o)),
+      def: fmt(brought),
+      modified: !same(value, brought),
+      staged: !same(value, resolveProfile(store.state.settings).style[k]),
+      reset: { key, value: brought },
+      note: `Default: what ${base.name} brings. Changing it makes your profile Custom, with everything else ${base.name} has.`,
+    };
+  }
+
+  /** The features of the profile in force; turning one on or off makes it Custom. */
+  function featuresRow() {
+    const p = draftProfile();
+    const base = baseOf();
+    const custom = p.id === 'custom';
+    return {
+      key: 'features', label: 'What the profile shows',
+      desc: `The sections, tabs and blocks of ${custom ? 'your profile' : p.name}, and the tab a project opens on. Turn one on or off and the profile becomes Custom, starting from these choices. Agent features stay hidden while you do not use agents (Agents tab).`,
+      control: customEditor({ base, flags: p.flags, style: p.style, startTab: p.startTab }, (c) => {
+        customise((x) => { x.flags = c.flags; x.startTab = c.startTab; }, { typing: true, settle: true });
+        markProfile(panels.querySelector('.pf-cards'), valueOf('profile'));
+      }, { agentsInUse: usesAgents({ agents: { use: valueOf('agents.use') } }) }),
+      current: custom ? `Custom, made from ${PRESETS[base].name}` : `As in ${p.name}`,
+      def: `As in ${PRESETS[base].name}`,
+      modified: custom,
+      staged: draft.has('profile') || draft.has('customProfile'),
+      reset: custom ? { key: 'profile', value: base } : null,
+      wide: true, keywords: 'features sections tabs blocks custom start tab',
     };
   }
 
@@ -340,11 +542,6 @@ export function mount(container, _route, actions) {
         actionButton('', () => attempt(async () => store.set('settings', await api.del('/api/settings/roots', { path: r }))), { cls: 'btn sm icon ghost', iconName: 'x', title: `Remove ${r}` })))
       : h('li.faint', 'No directories yet.'));
 
-    const lockOptions = [0, 5, 10, 15, 30, 60, 120, 240];
-    if (!lockOptions.includes(valueOf('autoLockMinutes'))) lockOptions.push(valueOf('autoLockMinutes'));
-    lockOptions.sort((a, b) => a - b);
-    const lockText = (m) => (m === 0 ? 'Never' : m < 60 || m % 60 ? `${m} min` : `${m / 60} h`);
-
     const pwCurrent = h('input.input', { type: 'password', autocomplete: 'current-password', 'aria-label': 'Current password' });
     const pwNext = h('input.input', { type: 'password', autocomplete: 'new-password', 'aria-label': 'New password', minLength: 8 });
     const pinPassword = h('input.input', { type: 'password', autocomplete: 'current-password', 'aria-label': 'Password' });
@@ -356,7 +553,8 @@ export function mount(container, _route, actions) {
           action('roots', 'Watched folders', 'FlintBench scans these folders on startup and watches them for new projects. Your folders are only read, never modified.',
             h('div.stack', roots, addRootForm()), { wide: true }),
           setting('scanDepth', 'Scan depth', 'How many folder levels below each watched folder are searched for projects. Deeper finds more, but scans take longer.',
-            (v, set) => stepper('Scan depth', [1, 2, 3, 4, 5, 6].map((n) => ({ value: n, text: `${n} level${n > 1 ? 's' : ''}` })), v, set)),
+            (v, set) => rangeField('Scan depth', { min: 1, max: 8, unit: 'levels' }, v ?? 3, set),
+            { fmt: (v) => `${v} level${v > 1 ? 's' : ''}`, keywords: 'depth levels deep folders' }),
           toggleSetting('autoAddGitRepos', 'Add Git repositories automatically', 'Discovered Git repositories join the project list without asking. Off: they wait in the new-project inbox on Home.'),
           action('rescan', 'Rescan now', 'Scans every watched folder again right away instead of waiting for a change.',
             actionButton('Rescan', () => attempt(() => api.post('/api/projects/scan'), { success: 'Scan complete' }), { cls: 'btn sm', iconName: 'refresh' })),
@@ -366,27 +564,49 @@ export function mount(container, _route, actions) {
       ],
       profile: [
         ['Profile', [
-          setting('profile', 'Profile', 'Decides which sections, tabs and details the console shows, and its accent, background and density. It previews at once; Save keeps it. This is the way to change how FlintBench looks and is organised.',
-            (v, set) => profileCards({ value: v, labs: true, onPick: set }),
+          setting('profile', 'Profile', 'Decides which sections, tabs and details the console shows and the tab a project opens on, and brings an accent and a density. Change any of them, here or in Appearance, and it becomes Custom, keeping the rest. It previews at once; Save keeps it.',
+            (v) => profileCards({ value: v, labs: true, onPick: pickProfile }),
             { fmt: (v) => PRESETS[v]?.name ?? 'Custom', wide: true, keywords: 'layout structure style essentials builder pro pilot custom labs test' }),
-          valueOf('profile') === 'custom'
-            ? setting('customProfile', 'Custom profile', 'Every feature on or off, and the style. Agent features stay hidden while you do not use agents (Agents tab).',
-              (v, set) => customEditor(v ?? customDefaults(), (c) => set(c, { typing: true }), { agentsInUse: usesAgents({ agents: { use: valueOf('agents.use') } }) }),
-              { fmt: (v) => (v ? `Based on ${PRESETS[v.base]?.name ?? 'Builder'}, edited` : 'Not edited yet'), wide: true, keywords: 'features sections tabs accent background density' })
-            : null,
-        ].filter(Boolean)],
+          featuresRow(),
+        ]],
       ],
       appearance: [
         ['Display', [
-          action('look', 'Accent, background and density', `They come with the profile (${PRESETS[valueOf('profile')]?.name ?? 'Custom'}). Choose another profile, or Custom to pick them yourself.`,
-            h('button.btn.sm', { type: 'button', onclick: () => setTab('profile', true) }, 'Go to Profile'), { keywords: 'color colour accent background pattern density' }),
-          setting('uiScale', 'UI scale', 'How large containers, sections and text are drawn. The sidebar keeps its size. The change shows at once; Save keeps it.',
-            (v, set) => stepper('UI scale', [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4].map((n) => ({ value: n, text: `${Math.round(n * 100)}%` })), v ?? 1, set),
-            { fmt: (v) => `${Math.round((v ?? 1) * 100)}%`, keywords: 'zoom size larger smaller scale bigger text' }),
+          setting('uiScale', 'Text size', 'How large text is drawn. Containers, spacing and icons grow with it, so everything keeps its proportions; the top bar keeps its size. − and + step by 5%, or type any size from 75 to 150%.',
+            (v, set) => numberStepper('Text size', { min: UI_SCALE_RANGE[0] * 100, max: UI_SCALE_RANGE[1] * 100, step: 5, unit: '%' }, Math.round((v ?? 1) * 100), (n, o) => set(n / 100, o)),
+            { fmt: (v) => `${Math.round((v ?? 1) * 100)}%`, keywords: 'zoom size larger smaller scale bigger text font interface ui' }),
           setting('theme', 'Theme', 'Dark first. System follows the operating system and switches with it.',
             (v, set) => stepper('Theme', [['dark', 'Dark'], ['light', 'Light'], ['system', 'System']].map(([value, text]) => ({ value, text })), v, set),
             { fmt: (v) => v[0].toUpperCase() + v.slice(1) }),
+          styleSetting('density', 'Density', 'Row heights and spacing. Compact fits more on screen.',
+            (v, set) => stepper('Density', DENSITIES.map(([value, text]) => ({ value, text })), v || 'comfortable', set),
+            { fmt: (v) => DENSITIES.find(([id]) => id === v)?.[1] ?? 'Comfortable', keywords: 'compact comfortable spacing rows' }),
         ]],
+        ['Colours and background', [
+          setting('appearance.palette', 'Colour theme', 'The colours of the canvas, bars and containers, in dark and in light.',
+            (v, set) => choiceCards('Colour theme', PALETTES.map(([value, text, bg, surface]) => ({ value, text, visual: paletteVisual(bg, surface) })), v, set, '.is-palettes'),
+            { fmt: (v) => PALETTES.find(([id]) => id === v)?.[1] ?? 'Graphite', wide: true, keywords: 'colour color palette theme navy blue green purple brown black oled' }),
+          styleSetting('accent', 'Accent colour', 'The colour of selections, links, focus and the clock.',
+            (v, set) => accentPicker(v, set),
+            { fmt: accentText, wide: true, keywords: 'color colour accent highlight hue' }),
+          setting('appearance.scene', 'Background', 'A video behind the console. Blue hour: a city skyline across a calm river just after sunset, filmed in real time, its lights on the slow water.',
+            (v, set) => choiceCards('Background', SCENES.map(([value, text]) => ({ value, text, visual: sceneVisual(value) })), v, set, '.is-scenes'),
+            { fmt: (v) => SCENES.find(([id]) => id === v)?.[1] ?? 'None', wide: true, keywords: 'wallpaper image scene picture video blue hour lake animated' }),
+          valueOf('appearance.scene') !== 'none'
+            ? toggleSetting('appearance.sceneMotion', 'Animated background', 'Off: the picture stands still. It also stands still when the system asks for reduced motion, and pauses while FlintBench is not on screen.', { keywords: 'motion animation still' })
+            : null,
+          valueOf('appearance.scene') !== 'none'
+            ? setting('appearance.sceneBlur', 'Background blur', 'Softens the picture so text in front of it stays easy to read. A blurred background also costs less to draw.',
+              (v, set) => rangeField('Background blur', { min: BLUR_RANGE[0], max: BLUR_RANGE[1], unit: 'px', hint: (n) => (n ? '' : 'Off') }, v ?? 0, set),
+              { fmt: (v) => (v ? `${v} px` : 'Off'), keywords: 'blur soft focus' })
+            : null,
+          styleSetting('background', 'Pattern', 'A faint pattern on the page canvas. Hidden while a background picture is on.',
+            (v, set) => stepper('Pattern', PATTERNS.map(([value, text]) => ({ value, text })), v || 'none', set),
+            { fmt: (v) => PATTERNS.find(([id]) => id === v)?.[1] ?? 'None', keywords: 'pattern hexagons dots grid lines texture' }),
+          setting('appearance.transparency', 'Transparency', 'How much of the background shows through the bars, cards and panels. Menus and dialogs stay almost solid.',
+            (v, set) => rangeField('Transparency', { min: TRANSPARENCY_RANGE[0], max: TRANSPARENCY_RANGE[1], unit: '%', hint: (n) => (n ? '' : 'Solid') }, v ?? 0, set),
+            { fmt: (v) => (v ? `${v}%` : 'Solid'), keywords: 'glass opacity translucent see-through' }),
+        ].filter(Boolean)],
       ],
       audio: [
         ['Notifications', [
@@ -397,8 +617,9 @@ export function mount(container, _route, actions) {
         ['Feedback', [
           localToggle('sound.enabled', 'Interface sounds', 'Short synthesised tones mark outcomes — unlock, ready, success, error, agent start and stop, lock. Never hovering or typing.'),
           localToggle('voice.enabled', 'Spoken greeting', 'After you unlock, a recorded voice greets you for the time of day.'),
-          localStepper('voice.volume', 'Voice volume', 'How loud the spoken greeting plays, relative to the system volume. Test voice below uses the value shown, before you save.',
-            VOICE_VOLUMES.map((n) => ({ value: n, text: `${Math.round(n * 100)}%` })), (v) => `${Math.round((v ?? 1) * 100)}%`, { keywords: 'volume loud quiet audio speech greeting' }),
+          localSetting('voice.volume', 'Voice volume', 'How loud the spoken greeting plays, relative to the system volume. Test voice below uses the value shown, before you save.',
+            (v, set) => rangeField('Voice volume', { min: 0, max: 100, unit: '%', hint: (n) => (n ? '' : 'Silent') }, Math.round((v ?? 1) * 100), (n, o) => set(n / 100, o)),
+            (v) => `${Math.round((v ?? 1) * 100)}%`, { keywords: 'volume loud quiet audio speech greeting' }),
         ]],
         ['Test', [
           action('test-sound', 'Test sound', 'Plays the "ready" tone.', h('button.btn.sm', { type: 'button', onclick: () => play('ready') }, icon('play', 11), 'Play')),
@@ -475,7 +696,8 @@ export function mount(container, _route, actions) {
       security: [
         ['Session', [
           setting('autoLockMinutes', 'Auto-lock', 'Locks the console after this much inactivity. Unlock with the password, or the PIN in a browser already signed in.',
-            (v, set) => stepper('Auto-lock', lockOptions.map((m) => ({ value: m, text: lockText(m) })), v, set), { fmt: lockText }),
+            (v, set) => rangeField('Auto-lock', { min: 0, max: 480, unit: 'min', hint: (m) => (m === 0 || m >= 60 ? lockText(m) : '') }, v ?? 30, set),
+            { fmt: lockText, note: '0 never locks. Up to 8 hours.', keywords: 'lock timeout idle minutes' }),
           action('lock', 'Lock now', 'Locks this console immediately. Shortcut: Ctrl+Shift+L.',
             h('button.btn.sm', { type: 'button', onclick: () => actions.lock() }, icon('lock', 12), 'Lock')),
           action('logout', 'Log out', 'Signs this browser out. You will need the password to sign in again.',
@@ -619,17 +841,23 @@ export function mount(container, _route, actions) {
   /* ---------- draft: stage, save, cancel ---------- */
 
   /** Stages a value (dropping it when it equals the saved one) and previews the look at once. */
-  function stage(key, value, { typing = false } = {}) {
+  function stage(key, value, { typing = false, settle = false } = {}) {
+    if (key.startsWith('style.')) { customise((c) => { c.style[key.slice(6)] = value; }, { typing, settle }); return; }
     if (same(value, stored(key))) draft.delete(key);
     else draft.set(key, value);
-    if (['theme', 'profile', 'customProfile', 'uiScale'].includes(key)) preview();
-    if (typing) { updateBar(); return; } // no rebuild under the cursor
+    if (['theme', 'profile', 'customProfile', 'uiScale'].includes(key) || key.startsWith('appearance.')) preview();
+    if (typing) {
+      if (settle) pending = true; // drawn again once the focus leaves the field
+      updateBar();
+      return; // no rebuild under the cursor
+    }
     render();
   }
 
   function preview() {
     // the look of the profile on show, with your theme and scale (unsaved choices included)
-    applySettingsLook({ ...store.state.settings, theme: valueOf('theme'), profile: valueOf('profile'), customProfile: valueOf('customProfile'), uiScale: valueOf('uiScale') ?? 1 });
+    const appearance = Object.fromEntries(['palette', 'scene', 'sceneMotion', 'sceneBlur', 'transparency'].map((k) => [k, valueOf(`appearance.${k}`)]));
+    applySettingsLook({ ...store.state.settings, theme: valueOf('theme'), profile: valueOf('profile'), customProfile: valueOf('customProfile'), uiScale: valueOf('uiScale') ?? 1, appearance });
   }
 
   function updateBar() {
@@ -679,7 +907,6 @@ export function mount(container, _route, actions) {
 
   function resetRows(rows) {
     for (const r of rows) stage(r.reset.key, r.reset.value, { typing: true });
-    if (rows.some((r) => ['theme', 'accent', 'background'].includes(r.reset.key))) preview();
     currentKey = null;
     render();
   }

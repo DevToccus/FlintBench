@@ -6,7 +6,6 @@ import { reportActivity, onServerEvent } from '../lib/ws.js';
 import { play } from '../lib/sound.js';
 import { agentFinishedToast, commitToast, githubNotificationToast, githubRepoToast, pushToast, serviceStartedToast } from '../lib/notify.js';
 import { ledClock } from '../lib/led-clock.js';
-import { timer, formatDuration } from '../lib/timer.js';
 import { openPalette, toast } from '../lib/ui.js';
 import { ago } from '../lib/format.js';
 import { isTestProfile, applySettingsLook } from '../lib/theme.js';
@@ -43,30 +42,19 @@ export function mountShell(root, actions) {
   // so opening or closing the menu never moves the icons or resizes text mid-way
   const labels = (text) => [h('span.rl-below', { 'aria-hidden': 'true' }, text), h('span.rl-side', text)];
   const links = NAV.map((n) => h(`a.rail-link${n.test ? '.is-test-only' : ''}`, { href: n.path, title: `${n.label} (Alt+${n.key})` }, icon(n.icon, 22), labels(n.label)));
-  const lockBtn = h('button.rail-link', { type: 'button', title: 'Lock (Ctrl+Shift+L)', onclick: () => actions.lock() }, icon('lock', 22), labels('Lock'));
+  const lockBtn = h('button.rail-link.v2-lock', { type: 'button', title: 'Lock (Ctrl+Shift+L)', 'aria-label': 'Lock FlintBench', onclick: () => actions.lock() }, icon('lock', 22), labels('Lock'));
   // one indicator that slides to the current section (orientation: where am I, where did I come from)
   const indicator = h('span.rail-indicator', { 'aria-hidden': 'true' });
   // the logo opens and closes the menu: icons only, or icons with their names beside them
-  const brand = h('button.rail-brand', { type: 'button', onclick: () => setRailOpen(!railOpen) },
-    h('span.brand-mark', brandMark()), h('span.brand-name', 'Flint', h('span', 'Bench')));
-  const rail = h('nav.rail', { 'aria-label': 'Global' }, indicator, brand, ...links, h('div.spacer'), lockBtn);
-  const main = h('main.main', { id: 'main' });
-  const status = h('footer.statusbar');
-  // date and time: a digital clock in the main sections, the status bar inside a project
+  const brand = h('a.rail-brand', { href: '/', 'aria-label': 'FlintBench home' },
+    h('span.brand-mark', brandMark()), h('span.brand-name', 'Flint', h('span', 'Bench')), h('span.v2-version', 'v2'));
+  const commandBtn = h('button.v2-command', { type: 'button', title: 'Search projects and commands (Ctrl+K)', 'aria-label': 'Search projects and commands', onclick: () => openPalette(paletteItems()) }, icon('search', 15), h('kbd', 'Ctrl K'));
+  // date and time: always in the top bar, in every section and inside projects; it opens the timer
   const clock = ledClock();
-  const now = () => new Date();
-  const timeText = (d) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-  const dateText = (d) => d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const app = h('div.app', rail, main, status, clock.el);
-  let railOpen = prefs.get('rail.open', false);
-  function setRailOpen(open) {
-    railOpen = open;
-    prefs.set('rail.open', open);
-    app.classList.toggle('rail-open', open);
-    brand.setAttribute('aria-expanded', String(open));
-    brand.title = open ? 'Collapse the menu' : 'Expand the menu';
-  }
-  setRailOpen(railOpen);
+  const rail = h('nav.rail', { 'aria-label': 'Global' }, indicator, brand, h('div.v2-navlinks', ...links), h('div.spacer'), commandBtn, clock.el, lockBtn);
+  const main = h('main.main', { id: 'main', tabindex: -1 });
+  const status = h('footer.statusbar');
+  const app = h('div.app', rail, main, status);
   replace(root, app);
 
   let view = null;
@@ -125,16 +113,6 @@ export function mountShell(root, actions) {
     if (githubLink && unread) githubLink.append(h('span.badge.is-info', { 'aria-label': `${unread} unread GitHub notifications` }, unread > 99 ? '99+' : String(unread)));
   }
 
-  // the timer in the status bar too: inside a project the clock is hidden, the countdown is not
-  const sbTimer = h('button.sb-timer', { type: 'button', hidden: true, title: 'Timer', onclick: () => { if (timer.status() === 'ringing') timer.stop(); } }, icon('timer', 12), h('span'));
-  const offTimer = timer.on(() => {
-    const st = timer.status();
-    sbTimer.hidden = st === 'idle';
-    sbTimer.classList.toggle('is-ringing', st === 'ringing');
-    sbTimer.title = st === 'ringing' ? 'Stop the alarm' : 'Timer';
-    sbTimer.lastChild.textContent = st === 'ringing' ? 'Time\u2019s up · stop' : `${formatDuration(timer.remaining())}${st === 'paused' ? ' · paused' : ''}`;
-  });
-
   let everConnected = false;
   /** Docker Up in Docker blue, Docker Down / Docker Off in grey, after the whale. */
   function dockerStatus(docker) {
@@ -157,10 +135,9 @@ export function mountShell(root, actions) {
       h('span', `${projects.length} ${projects.length === 1 ? 'Project' : 'Projects'}`),
       h('span', `${running} Running`),
       agents ? h('span.agent-text', `${agents} ${agents > 1 ? 'Agents' : 'Agent'} Active`) : null,
-      docker && has('ui.technical') ? dockerStatus(docker) : null,
-      h('span.event', { title: ev ? eventLine(ev) : '' }, ev ? `${eventLine(ev)} · ${ago(ev.at)}` : ''),
-      sbTimer,
-      current().name === 'project' ? h('span.sb-clock', { title: dateText(now()) }, `${now().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · ${timeText(now())}`) : null);
+      // Up or Down whenever the integration is on; Off only with the technical details
+      docker && (docker.enabled || has('ui.technical')) ? dockerStatus(docker) : null,
+      h('span.event', { title: ev ? eventLine(ev) : '' }, ev ? `${eventLine(ev)} · ${ago(ev.at)}` : ''));
   }
 
   function paletteItems() {
@@ -180,6 +157,7 @@ export function mountShell(root, actions) {
       for (const cmd of view?.commands?.() ?? []) items.push(cmd);
     }
     items.push({ label: 'Rescan project directories', icon: 'refresh', run: () => projectsView.rescan() });
+    items.push({ label: 'Set a timer', icon: 'timer', keywords: 'clock countdown alarm', run: () => clock.open() });
     items.push({ label: 'Lock FlintBench', icon: 'lock', hint: 'Ctrl+Shift+L', run: () => actions.lock() });
     items.push({ label: 'Log out', icon: 'logout', run: () => actions.logout() });
     return items;
@@ -214,8 +192,6 @@ export function mountShell(root, actions) {
 
   const onPointer = () => reportActivity();
   const railObserver = new ResizeObserver(placeIndicator);
-  const clockObserver = new ResizeObserver(() => document.documentElement.style.setProperty('--clock-h', `${clock.el.offsetHeight}px`));
-  clockObserver.observe(clock.el);
   railObserver.observe(rail);
   // agents starting and stopping are the outcomes worth hearing; everything else stays silent
   const offEvents = onServerEvent((msg) => {
@@ -278,13 +254,8 @@ export function mountShell(root, actions) {
     }),
   ];
   const tick = setInterval(renderStatus, 30_000);
-  // the clock shows seconds; inside a project only the status bar's minutes need refreshing
-  let shownMinute = -1;
-  const clockTick = setInterval(() => {
-    const d = now();
-    if (current().name !== 'project') clock.update(d);
-    else if (d.getMinutes() !== shownMinute) { shownMinute = d.getMinutes(); renderStatus(); }
-  }, 1000);
+  // the clock shows seconds, in every section
+  const clockTick = setInterval(() => clock.update(), 1000);
   let shownProfile = profileSignature();
   applyNav();
   const offRoute = onRoute(renderRoute);
@@ -297,9 +268,7 @@ export function mountShell(root, actions) {
       view?.destroy?.();
       offRoute();
       offEvents();
-      offTimer();
       railObserver.disconnect();
-      clockObserver.disconnect();
       unsubs.forEach((u) => u());
       clearInterval(tick);
       clearInterval(clockTick);

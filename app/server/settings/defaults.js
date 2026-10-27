@@ -19,9 +19,10 @@ export function defaultSettings() {
     editor: { command: 'code', others: [] }, // the default editor, then the other ones offered in menus
     autoLockMinutes: 30,
     theme: 'dark',
-    accent: '', // '' = the default sky blue, otherwise #rrggbb
-    background: 'hive', // background pattern: hive | dots | grid | lines | none
-    uiScale: 1, // size of the content area relative to its designed size (sidebar unchanged): one of UI_SCALES
+    accent: '', // '' = the default warm copper, otherwise #rrggbb
+    background: 'none', // background pattern: hive | dots | grid | lines | none
+    appearance: { palette: 'graphite', scene: 'none', sceneMotion: true, sceneBlur: 0, transparency: 0 }, // colour theme, background scene, its motion and blur (px), transparency (%), ranges in app/web/js/lib/appearance.js
+    uiScale: 1, // size of text, and of the content area with it, relative to its designed size (top bar unchanged): 0.75–1.5
     profile: 'builder', // structure + style of the console: see app/web/js/lib/profiles.js (custom: customProfile)
     customProfile: null, // { base, flags, style: { accent, background, density }, startTab } once Custom was edited
     notifications: { level: 'all' }, // all | important (agents finishing, pushes) | quiet (only what you asked for)

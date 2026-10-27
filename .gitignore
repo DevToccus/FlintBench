@@ -10,6 +10,8 @@
 !/package-lock.json
 !/app/
 !/docs/
+!/qa/
+!/PROJECT-DESIGN.md
 
 # never, even inside the folders let in above
 node_modules/
@@ -22,3 +24,5 @@ data/
 .DS_Store
 Thumbs.db
 desktop.ini
+qa/.runs/
+graphify-out/

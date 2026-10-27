@@ -13,11 +13,11 @@ export const FEATURES = [
   ['tab.tasks', 'Project tabs', 'Tasks', 'A short list of what to do next in a project.'],
   ['tab.graph', 'Project tabs', 'Graph', 'The knowledge graph of a project, when it has one (graphify).'],
   ['home.counters', 'Home', 'Counters', 'Projects, running, need attention, agents active, uncommitted: one click filters.'],
-  ['home.live', 'Home', 'Live projects', 'The projects being worked on right now, and what is happening in each.'],
+  ['home.live', 'Home', 'Live project activity', 'Animated activity directly on project cards: agents working and files edited, with an idle state while tools wait.'],
   ['overview.agent', 'Project overview', 'Agent block', 'Start or resume an agent from the overview.'],
   ['overview.preview', 'Project overview', 'Page preview', 'A picture of the page a web app serves, Offline when it is not running.'],
   ['overview.files', 'Project overview', 'Files changed', 'Every file changed lately, with the lines added and removed.'],
-  ['ui.technical', 'Details', 'Technical details', 'Docker and running processes in the status bar.'],
+  ['ui.technical', 'Details', 'Technical details', 'Docker in the status bar also when its integration is off.'],
   ['ui.greeting', 'Details', 'Welcome sequence', 'The greeting shown after you unlock.'],
 ];
 export const FEATURE_KEYS = FEATURES.map(([key]) => key);
@@ -30,10 +30,15 @@ export const START_TABS = [['overview', 'Overview'], ['git', 'Git'], ['files', '
 
 const all = (except = []) => Object.fromEntries(FEATURE_KEYS.map((k) => [k, !except.includes(k)]));
 
-/** The ready-made profiles. Labs is the former Test profile: Pro plus features being tried. */
+/**
+ * The ready-made profiles. Labs is the former Test profile: Pro plus features being tried. `icon`
+ * (lib/dom.js) tells them apart in the picker; their accent and density can be changed in
+ * Settings › Appearance, which turns the profile into Custom.
+ */
 export const PRESETS = {
   essentials: {
     name: 'Essentials',
+    icon: 'leaf',
     tagline: 'Simple and calm',
     description: 'Your projects, their files and Git, and a page preview. Fewer sections and words, nothing technical in the way.',
     flags: all(['nav.agents', 'nav.activity', 'tab.agents', 'tab.docs', 'tab.sessions', 'tab.graph', 'overview.files', 'ui.technical']),
@@ -42,34 +47,38 @@ export const PRESETS = {
   },
   builder: {
     name: 'Builder',
+    icon: 'wrench',
     tagline: 'Balanced, for every day',
     description: 'Everything you use day to day: services, sessions, docs, tasks and activity, without the low-level details.',
     flags: all(['tab.graph', 'ui.technical']),
-    style: { accent: '', background: 'hive', density: 'comfortable' },
+    style: { accent: '', background: 'none', density: 'comfortable' },
     startTab: 'overview',
   },
   pro: {
     name: 'Pro',
+    icon: 'layers',
     tagline: 'Every detail',
     description: 'Every section, tab and detail: processes, Docker, graphs. Denser rows, more on screen.',
     flags: all(),
-    style: { accent: '#7c8cff', background: 'grid', density: 'compact' },
+    style: { accent: '#7c8cff', background: 'none', density: 'compact' },
     startTab: 'overview',
   },
   pilot: {
     name: 'AI Pilot',
+    icon: 'sparkle',
     tagline: 'Agents first',
     description: 'For when agents do most of the work: a project opens on its agents, sessions and live work stay in front.',
     flags: all(['ui.technical']),
-    style: { accent: '#b18cff', background: 'dots', density: 'comfortable' },
+    style: { accent: '#b18cff', background: 'none', density: 'comfortable' },
     startTab: 'agents',
   },
   test: {
     name: 'Labs',
+    icon: 'flask',
     tagline: 'New features first',
     description: 'Pro, plus the features still being tried before they reach every profile.',
     flags: all(),
-    style: { accent: '#ff7ab6', background: 'grid', density: 'compact' },
+    style: { accent: '#ff7ab6', background: 'none', density: 'compact' },
     startTab: 'overview',
     hidden: true, // not recommended by the setup
   },

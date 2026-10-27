@@ -1,5 +1,5 @@
 import { h, icon, replace, actionButton } from '../lib/dom.js';
-import { store, subscribe } from '../lib/store.js';
+import { store, subscribe, prefs } from '../lib/store.js';
 import { api, projectUrl } from '../lib/api.js';
 import { projectPath } from '../lib/router.js';
 import { ago, when } from '../lib/format.js';
@@ -69,20 +69,27 @@ export function mount(container) {
   });
   const filter = h('input.input', { type: 'search', placeholder: 'Filter', 'aria-label': 'Filter projects', 'data-search': true, style: { maxWidth: '260px' } });
   const table = h('div');
-  const candidatesBox = h('div');
   filter.addEventListener('input', () => render());
+  // folders found by scans and not added yet: below your projects, in a drawer you can close
+  // (remembered in this browser). It stays the same element so a refresh does not replay its opening.
+  const candTitle = h('span.drawer-title');
+  const candBody = h('div.drawer-body');
+  const candidatesBox = h('details.drawer.cand-drawer', { open: prefs.get('projects.candidates.open', true) },
+    h('summary.drawer-head', icon('search', 16), candTitle, h('span.spacer'), h('span.drawer-hint'), icon('down', 16)),
+    candBody);
+  candidatesBox.addEventListener('toggle', () => prefs.set('projects.candidates.open', candidatesBox.open));
 
   replace(inner,
     h('header.page-head',
-      h('div', h('h1', 'Projects'), h('p.sub', 'Projects known to FlintBench. Removing one deletes only its FlintBench metadata.')),
+      h('div', h('h1', 'Projects')),
       h('span.spacer'),
       actionButton('Rescan', rescan, { cls: 'btn', iconName: 'refresh' })),
     h('div.panel.panel-body', { style: { marginBottom: '14px' } },
       h('div.label', { style: { marginBottom: '8px' } }, 'Add a project'),
       addForm, addError),
-    candidatesBox,
     h('div.toolbar', filter),
-    table);
+    table,
+    candidatesBox);
 
   function render() {
     const q = filter.value.trim().toLowerCase();
@@ -90,9 +97,9 @@ export function mount(container) {
       .filter((p) => !q || `${p.name} ${p.path}`.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name));
     const cands = store.state.candidates;
-    replace(candidatesBox, cands.length ? h('div.panel', { style: { marginBottom: '14px' } },
-      h('div.panel-head', h('span.label', `Detected, not added (${cands.length})`), h('span.spacer'),
-        actionButton('Add all', () => attempt(() => api.post('/api/candidates/add', { paths: cands.map((c) => c.path) }), { success: 'Projects added' }), { cls: 'btn sm' })),
+    candidatesBox.hidden = !cands.length;
+    candTitle.textContent = `${cands.length} detected, not added`;
+    replace(candBody, cands.length ? [
       h('div.table-wrap', { style: { border: 0, borderRadius: 0 } }, h('table.table', h('tbody', cands.map((c) => h('tr',
         h('td', h('strong', c.name)),
         h('td.dim', c.stack.join(' · ')),
@@ -102,7 +109,10 @@ export function mount(container) {
           actionButton('Skip in scans', async () => {
             const r = await attempt(() => api.post('/api/candidates/ignore', { paths: [c.path] }));
             if (r) store.set('ignored', r.ignored);
-          }, { cls: 'btn sm ghost', title: 'Never offer this folder again (undo in Settings › Project directories)' })))))))) : null);
+          }, { cls: 'btn sm ghost', title: 'Never offer this folder again (undo in Settings › Project directories)' }))))))),
+      h('div.drawer-foot',
+        actionButton('Add all', () => attempt(() => api.post('/api/candidates/add', { paths: cands.map((c) => c.path) }), { success: 'Projects added' }), { cls: 'btn sm', iconName: 'plus' })),
+    ] : []);
 
     replace(table, list.length ? h('div.table-wrap', h('table.table',
       h('thead', h('tr', h('th', 'Project'), h('th', 'Stack'), h('th', 'Path'), h('th', 'Added'), h('th', 'Last activity'), h('th', ''))),

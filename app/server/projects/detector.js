@@ -46,9 +46,11 @@ export async function detectProject(dir, names) {
   if (!strong.length && !present.includes('index.html')) return null;
 
   const stack = new Set();
+  let description = '';
   const set = new Set(entries);
   if (set.has('package.json')) {
     const pkg = await readJson(path.join(dir, 'package.json'));
+    if (typeof pkg?.description === 'string') description = pkg.description.trim().slice(0, 240);
     const deps = { ...pkg?.dependencies, ...pkg?.devDependencies };
     for (const [dep, label] of NODE_STACK) if (dep in deps) stack.add(label);
     if (set.has('tsconfig.json')) stack.add('TypeScript');
@@ -73,6 +75,7 @@ export async function detectProject(dir, names) {
 
   return {
     name: path.basename(dir),
+    description,
     path: dir,
     indicators: present,
     stack: [...stack],

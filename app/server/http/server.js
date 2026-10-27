@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
@@ -19,6 +20,9 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.png': 'image/png',
   '.webp': 'image/webp',
+  '.jpg': 'image/jpeg',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
   '.woff2': 'font/woff2',
   '.mp3': 'audio/mpeg',
   '.ttf': 'font/ttf',
@@ -125,7 +129,7 @@ function securityHeaders(res, port) {
     "font-src 'self'",
     `connect-src 'self' ws://localhost:${port} ws://127.0.0.1:${port}`,
     // live previews of the projects' own dev servers (Overview), nothing else can be framed
-    'frame-src http://localhost:* http://127.0.0.1:* http://[::1]:*',
+    'frame-src http://localhost:* http://127.0.0.1:*',
     "frame-ancestors 'none'",
     "base-uri 'none'",
     "form-action 'self'",
@@ -137,6 +141,27 @@ function send(res, status, body, headers = {}) {
   const payload = body === undefined ? '' : JSON.stringify(body);
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
   res.end(payload);
+}
+
+/** A large media file, whole or by byte range (Range: bytes=start-end). */
+async function serveRanges(req, res, file) {
+  const { size } = await fs.stat(file);
+  const head = { 'Content-Type': MIME[path.extname(file)], 'Accept-Ranges': 'bytes', 'Cache-Control': 'max-age=86400' };
+  const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? '');
+  if (!m) {
+    res.writeHead(200, { ...head, 'Content-Length': size });
+    if (req.method === 'HEAD') return res.end();
+    return createReadStream(file).pipe(res);
+  }
+  const start = m[1] ? Number(m[1]) : Math.max(0, size - Number(m[2]));
+  const end = m[1] && m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+  if (start > end || start >= size) {
+    res.writeHead(416, { ...head, 'Content-Range': `bytes */${size}` });
+    return res.end();
+  }
+  res.writeHead(206, { ...head, 'Content-Length': end - start + 1, 'Content-Range': `bytes ${start}-${end}/${size}` });
+  if (req.method === 'HEAD') return res.end();
+  return createReadStream(file, { start, end }).pipe(res);
 }
 
 export function createHttpServer({ router, auth, webDir, port, log = console }) {
@@ -158,6 +183,8 @@ export function createHttpServer({ router, auth, webDir, port, log = console }) 
         file = path.join(webDir, 'index.html');
       }
     }
+    // video is played in ranges: the browser asks for the part it needs, and loops without a new download
+    if (['.mp4', '.webm'].includes(path.extname(file))) return serveRanges(req, res, file);
     const body = await fs.readFile(file);
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(file)] ?? 'application/octet-stream',

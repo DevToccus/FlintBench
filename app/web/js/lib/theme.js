@@ -1,4 +1,6 @@
 import { PROFILE_IDS, resolveProfile } from './profiles.js';
+import { normalizeAppearance, isUiScale } from './appearance.js';
+import { applyScene } from './scene.js';
 /**
  * Theme (dark / light / system) and the accent colour.
  * The accent is chosen as one vivid colour; from it we derive what each theme needs to stay
@@ -6,7 +8,23 @@ import { PROFILE_IDS, resolveProfile } from './profiles.js';
  * kept for the LED clock, which always sits on a dark face.
  */
 
-export const DEFAULT_ACCENT = '#6cc6ff';
+export const DEFAULT_ACCENT = '#e5ab7d';
+
+// Settings preview the look on every move of a slider: values that did not change are not written
+// again, so the page is not restyled (and nothing flickers) for nothing.
+const rootStyle = () => document.documentElement.style;
+function setVar(name, value) {
+  if (value === null) { if (rootStyle().getPropertyValue(name)) rootStyle().removeProperty(name); return; }
+  if (rootStyle().getPropertyValue(name) !== value) rootStyle().setProperty(name, value);
+}
+function setData(key, value) {
+  const data = document.documentElement.dataset;
+  if (value === null) { if (key in data) delete data[key]; return; }
+  if (data[key] !== value) data[key] = value;
+}
+function remember(key, value) {
+  try { if (localStorage.getItem(key) !== value) localStorage.setItem(key, value); } catch { /* storage unavailable */ }
+}
 const CACHE_KEY = 'flintbench:accent';
 
 export const isHex = (v) => /^#[0-9a-f]{6}$/i.test(String(v ?? ''));
@@ -50,15 +68,14 @@ export function hueOf(hex) {
 }
 
 export function applyAccent(hex) {
-  const root = document.documentElement.style;
   if (!isHex(hex) || hex.toLowerCase() === DEFAULT_ACCENT) {
-    for (const p of ['--accent-raw', '--accent-dark', '--accent-light']) root.removeProperty(p);
-  } else {
-    root.setProperty('--accent-raw', hex);
-    root.setProperty('--accent-dark', readable(hex, '#0f1218', [255, 255, 255], 4.2));
-    root.setProperty('--accent-light', readable(hex, '#fafbfc', [0, 0, 0], 4.5));
+    for (const p of ['--accent-raw', '--accent-dark', '--accent-light']) setVar(p, null);
+  } else if (rootStyle().getPropertyValue('--accent-raw') !== hex) {
+    setVar('--accent-raw', hex);
+    setVar('--accent-dark', readable(hex, '#0f1218', [255, 255, 255], 4.2));
+    setVar('--accent-light', readable(hex, '#fafbfc', [0, 0, 0], 4.5));
   }
-  try { localStorage.setItem(CACHE_KEY, isHex(hex) ? hex : ''); } catch { /* storage unavailable */ }
+  remember(CACHE_KEY, isHex(hex) ? hex : '');
 }
 
 export const PATTERNS = [['hive', 'Hexagons'], ['dots', 'Dots'], ['grid', 'Grid'], ['lines', 'Diagonal lines'], ['none', 'None']];
@@ -66,9 +83,9 @@ const PATTERN_KEY = 'flintbench:pattern';
 
 /** Background pattern of the console (and of the lock screen, from the copy kept in this browser). */
 export function applyPattern(name) {
-  const value = PATTERNS.some(([id]) => id === name) ? name : 'hive';
-  document.documentElement.dataset.pattern = value;
-  try { localStorage.setItem(PATTERN_KEY, value); } catch { /* storage unavailable */ }
+  const value = PATTERNS.some(([id]) => id === name) ? name : 'none';
+  setData('pattern', value);
+  remember(PATTERN_KEY, value);
 }
 
 const PROFILE_KEY = 'flintbench:profile';
@@ -76,8 +93,8 @@ const PROFILE_KEY = 'flintbench:profile';
 /** The profile in force (lib/profiles.js), on <html data-profile>; Labs is 'test'. */
 export function applyProfile(name) {
   const value = PROFILE_IDS.includes(name) ? name : 'builder';
-  document.documentElement.dataset.profile = value;
-  try { localStorage.setItem(PROFILE_KEY, value); } catch { /* storage unavailable */ }
+  setData('profile', value);
+  remember(PROFILE_KEY, value);
 }
 
 /** True in the Labs profile (id 'test'), where features are tried before they reach every profile. */
@@ -88,33 +105,49 @@ const DENSITY_KEY = 'flintbench:density';
 /** Row heights and spacing of the profile: comfortable (default) or compact. */
 export function applyDensity(value) {
   const v = value === 'compact' ? 'compact' : 'comfortable';
-  document.documentElement.dataset.density = v;
-  try { localStorage.setItem(DENSITY_KEY, v); } catch { /* storage unavailable */ }
+  setData('density', v);
+  remember(DENSITY_KEY, v);
 }
 
-/** Theme and scale are yours; accent, background and density come from the profile. */
+const LOOK_KEY = 'flintbench:appearance';
+
+/**
+ * Colour theme, background scene (with its motion and blur) and transparency: tokens on <html>
+ * (data-palette, data-scene, --glass) and the scene layer behind the console.
+ */
+export function applyAppearance(value) {
+  const a = normalizeAppearance(value);
+  setData('palette', a.palette === 'graphite' ? null : a.palette);
+  setData('scene', a.scene === 'none' ? null : a.scene);
+  setVar('--glass', String(a.transparency / 100));
+  applyScene({ scene: a.scene, motion: a.sceneMotion, blur: a.sceneBlur });
+  remember(LOOK_KEY, JSON.stringify(a));
+}
+
+/** Theme, scale and appearance are yours; accent, background and density come from the profile. */
 export function applySettingsLook(s) {
   if (!s) return;
   const { style } = resolveProfile(s);
-  applyTheme(s.theme, style.accent ?? '', style.background ?? 'hive', s.profile, s.uiScale ?? 1);
+  applyTheme(s.theme, style.accent ?? '', style.background ?? 'none', s.profile, s.uiScale ?? 1);
   applyDensity(style.density);
+  applyAppearance(s.appearance);
 }
 
 const SCALE_KEY = 'flintbench:ui-scale';
 
-/** Size of the content area relative to its designed size (0.8–1.4, 1 = 100%); the sidebar keeps its size. */
+/** Size of text, and of the content area with it (0.75–1.5, 1 = 100%); the top bar keeps its size. */
 export function applyScale(value) {
   const v = Number(value);
-  const scale = [0.8, 0.9, 1, 1.1, 1.2, 1.3, 1.4].includes(v) ? v : 1;
-  document.documentElement.style.setProperty('--ui-scale', String(scale));
-  try { localStorage.setItem(SCALE_KEY, String(scale)); } catch { /* storage unavailable */ }
+  const scale = isUiScale(v) ? v : 1;
+  setVar('--ui-scale', String(scale));
+  remember(SCALE_KEY, String(scale));
 }
 
 export function applyTheme(theme, accent, pattern, profile, scale) {
   const resolved = theme === 'system'
     ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
     : theme ?? 'dark';
-  document.documentElement.dataset.theme = resolved;
+  setData('theme', resolved);
   if (accent !== undefined) applyAccent(accent);
   if (pattern !== undefined) applyPattern(pattern);
   if (profile !== undefined) applyProfile(profile);
@@ -125,9 +158,10 @@ export function applyTheme(theme, accent, pattern, profile, scale) {
 export function applyCachedAccent() {
   try {
     applyAccent(localStorage.getItem(CACHE_KEY) ?? '');
-    applyPattern(localStorage.getItem(PATTERN_KEY) ?? 'hive');
+    applyPattern(localStorage.getItem(PATTERN_KEY) ?? 'none');
     applyProfile(localStorage.getItem(PROFILE_KEY) ?? 'builder');
     applyDensity(localStorage.getItem(DENSITY_KEY) ?? 'comfortable');
     applyScale(localStorage.getItem(SCALE_KEY) ?? 1);
+    applyAppearance(JSON.parse(localStorage.getItem(LOOK_KEY) ?? 'null') ?? undefined);
   } catch { /* storage unavailable */ }
 }

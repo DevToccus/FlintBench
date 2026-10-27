@@ -49,6 +49,7 @@ const ICONS = {
   stop: 'M7 7h10v10H7z',
   restart: 'M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4',
   plus: 'M12 5v14M5 12h14',
+  minus: 'M5 12h14',
   x: 'M6 6l12 12M18 6 6 18',
   search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4',
   external: 'M14 4h6v6M20 4l-9 9M18 14v5H5V6h5',
@@ -86,10 +87,37 @@ const ICONS = {
   graph: 'M6 5.5a2 2 0 1 0 0 .01M18 5.5a2 2 0 1 0 0 .01M12 18.5a2 2 0 1 0 0 .01M8 6.5h8M7 7.5l4 9M17 7.5l-4 9',
   bell: 'M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 2h-14zM10 20.5a2 2 0 0 0 4 0',
   star: 'M12 3.8l2.5 5.1 5.6.8-4 3.9.9 5.6-5-2.6-5 2.6.9-5.6-4-3.9 5.6-.8z',
+  // profiles: Essentials, Builder, Pro, AI Pilot, Labs (Custom uses settings)
+  leaf: 'M5 19C5 10.5 10 5 19.5 4.5 19.5 14 14 19 5 19zM5 19l8.5-8.5',
+  wrench: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z',
+  layers: 'M12 3.5 20.5 8 12 12.5 3.5 8zM3.5 12l8.5 4.5 8.5-4.5M3.5 16l8.5 4.5 8.5-4.5',
+  sparkle: 'M11 3.5l1.7 4.8 4.8 1.7-4.8 1.7L11 16.5l-1.7-4.8-4.8-1.7 4.8-1.7zM18 14.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z',
+  flask: 'M9.5 3.5h5M10.5 3.5v5.2L5 18.2a1.6 1.6 0 0 0 1.4 2.3h11.2a1.6 1.6 0 0 0 1.4-2.3l-5.5-9.5V3.5M7.4 14.5h9.2',
+};
+
+// Separate the moving ink from fixed frames. The control and its SVG viewport stay still.
+const ICON_PARTS = {
+  settings: [
+    ['M4 7h10M18 7h2M14 5v4', 'upper'],
+    ['M4 17h4M12 17h8M8 15v4', 'lower'],
+  ],
+  external: [
+    ['M14 4h6v6M20 4l-9 9', 'arrow'],
+    ['M18 14v5H5V6h5', 'fixed'],
+  ],
+  terminal: [
+    ['M4 5h16v14H4zM12.5 15h4', 'fixed'],
+    ['M7.5 9.5l3 2.5-3 2.5', 'caret'],
+  ],
+  agent: [
+    ['M12 3v3M12 18v3M3 12h3M18 12h3M7.8 7.8 6 6M18 18l-1.8-1.8M16.2 7.8 18 6M6 18l1.8-1.8', 'rays'],
+    ['M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', 'fixed'],
+  ],
 };
 
 export function icon(name, size = 16) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.dataset.icon = name;
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.setAttribute('width', size);
   svg.setAttribute('height', size);
@@ -99,10 +127,13 @@ export function icon(name, size = 16) {
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
   svg.setAttribute('aria-hidden', 'true');
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', ICONS[name] ?? ICONS.dots);
-  if (name === 'play') path.setAttribute('fill', 'currentColor');
-  svg.append(path);
+  for (const [d, part] of ICON_PARTS[name] ?? [[ICONS[name] ?? ICONS.dots]]) {
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    if (part) path.dataset.iconPart = part;
+    if (name === 'play') path.setAttribute('fill', 'currentColor');
+    svg.append(path);
+  }
   return svg;
 }
 

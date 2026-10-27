@@ -1,0 +1,52 @@
+{
+  "result": "PASS",
+  "checks": [
+    "Local account creation and real bootstrap render",
+    "Icon feedback: parent label and direct glyph hover, internal movement and stable hit area",
+    "Icon feedback: keyboard focus and Enter navigation preserve the selected section",
+    "Icon feedback: action direction, fixed frames, press, interruption, disabled and busy states",
+    "Icon feedback: reduced motion removes travel while preserving visible focus",
+    "Icon feedback: touch emulation, no sticky hover, project navigation and mobile overflow",
+    "Card descriptions come from package.json",
+    "Live activity is integrated in main cards; agent animation continues across WebSocket updates",
+    "VS Code editor state plus a real filesystem save animates the main card",
+    "Tool-specific signals for Claude, Codex, Antigravity and Gemini",
+    "Waiting agents and an editor without recent saves remain static",
+    "Reduced motion retains the work status and a static visible agent signal",
+    "Search, empty results and Escape reset",
+    "Project sorting by pointer and keyboard",
+    "Card Start → HTTP API → real PTY service → live switch and running filter",
+    "Git changes filter uses actual uncommitted files",
+    "Project actions menu, Escape and keyboard card navigation",
+    "Clock always in the top bar, timer access and command palette",
+    "Project workspace tabs and actual file reading",
+    "Resume opens the project with the terminal dock",
+    "Desktop, laptop, tablet and mobile: 8 widths without horizontal overflow",
+    "Light theme and reduced motion",
+    "Colour theme, blue hour video background (served in ranges), blur and transparency apply and are validated",
+    "Numbers by slider or typed; changing the accent makes the profile Custom, resetting it brings Pro back",
+    "Terminal opens, closes, maximises and restores beside the project menu, never over it",
+    "Card Stop → HTTP API → PTY teardown → live stopped state",
+    "All main sections still mount",
+    "Add project from the home CTA, persistence and disabled power for static folders",
+    "Profile changes preserve the home and hide disabled agent features",
+    "Lock clears project data from the DOM and password unlock restores it",
+    "No browser runtime errors"
+  ],
+  "warnings": [],
+  "errors": [],
+  "browser": {
+    "name": "Chromium",
+    "version": "151.0.7922.34",
+    "desktop": "1600x1060, mouse and keyboard",
+    "mobile": "390x844, touch emulation",
+    "reducedMotion": "reduce and no-preference"
+  },
+  "unverified": [
+    "Physical touch device",
+    "Safari",
+    "Firefox",
+    "Screen reader"
+  ],
+  "note": "Browser Chromium; isolated QA projects. Activity checks send simulated agent/editor records through the real WebSocket channel and edit real fixture files. External editor launch, live GitHub mutations, Docker and AI agent execution are not exercised."
+}
